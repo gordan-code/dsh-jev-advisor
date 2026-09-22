@@ -1,0 +1,89 @@
+{
+  "name": "dsh-jev-advisor",
+  "version": "0.1.2",
+  "description": "Jev (TypeSafe System One) gives the human a second opinion, not the agent. When DSH's model asks you a multiple-choice question, dsh-jev-advisor builds a structured Jev request and floats the recommendation, probability spread and confidence beside the options - one click to adopt. API key lives in Settings. No prompt changes.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "jev",
+    "typesafe",
+    "system-one",
+    "ask-user-question",
+    "second-opinion",
+    "web-ui"
+  ],
+  "license": "MIT",
+  "author": "gordan-code (https://github.com/gordan-code)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gordan-code/dsh-jev-advisor.git"
+  },
+  "homepage": "https://github.com/gordan-code/dsh-jev-advisor#readme",
+  "bugs": {
+    "url": "https://github.com/gordan-code/dsh-jev-advisor/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/README.zh.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:build": "node scripts/build.mjs --check",
+    "check:pack": "node scripts/check-pack.mjs",
+    "test": "node scripts/build.mjs --check && node test/smoke.mjs && node test/client.mjs",
+    "test:e2e": "node test/e2e.mjs",
+    "prepack": "node scripts/build.mjs"
+  }
+}

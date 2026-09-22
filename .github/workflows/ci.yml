@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # Fails when the committed lib/ no longer matches src/, then runs the
+      # request-building suite and the client-wiring suite.
+      - run: npm test
+
+      # DSH-specific: lib/client.js and cordis.patch.yml both fail silently
+      # when they are missing from the tarball.
+      - run: npm run check:pack

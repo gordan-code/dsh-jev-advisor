@@ -1,0 +1,17 @@
+node_modules/
+*.log
+.DS_Store
+.npm-cache/
+test/last-request.json
+*.tgz
+
+# Scratch files (temp scripts, downloaded tarballs, extracted package copies).
+tmp-*
+tmp*/
+
+# `lib/` is deliberately NOT ignored: `dsh plugin add github:<owner>/dsh-jev-advisor`
+# installs this repository as-is, and pnpm only runs a `prepare` script for a
+# git dependency — one it blocks until the user allowlists it in the profile's
+# pnpm-workspace.yaml. Shipping the built files keeps a git install a single
+# command. `npm test` starts with `scripts/build.mjs --check`, which fails when
+# `lib/` drifts from `src/`, so the committed copy cannot silently go stale.

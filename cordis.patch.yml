@@ -1,0 +1,50 @@
+# dsh-jev-advisor bundle patch
+#
+# This is the `dsh.bundle.patch` layer of the package. When the plugin is
+# installed through the official CLI
+#
+#   dsh plugin --profile <name> add github:gordan-code/dsh-jev-advisor
+#   dsh plugin --profile <name> add dsh-jev-advisor          # once it is on npm
+#
+# the command reconciles `dsh.profile.bundles` against installed packages and,
+# seeing this declaration, appends `dsh-jev-advisor` to the bundle stack.
+# Profile boot then merges THIS patch (a single `insert` of the plugin row).
+#
+# The host row mounts the plugin: it registers the `dsh-jev-advisor` settings
+# namespace, the loopback-only `/dsh-jev-advisor/api/*` routes, and (through
+# `dsh.client`) the browser half. No profile file edits are needed.
+#
+# Why the package is not called `dsh-jev`: the name is taken on npm
+# (`zhangxaochen/dsh-jev`, v0.2.0) and at least five GitHub repositories share
+# it. Every identifier this plugin owns is namespaced to match, so it can sit
+# beside those plugins without a duplicate-namespace or duplicate-route boot
+# failure.
+#
+# Optional composition config. Every field is overridden by the user settings
+# section once the user saves anything in Settings -> Jev, so seed only what a
+# deployment must pin (a headless profile pinning an endpoint, for example).
+# `apiKey` here is a convenience for deployments without a settings provider;
+# the Settings -> Jev field is the normal path.
+#
+#   - insert:
+#       - id: dsh-jev-advisor
+#         name: 'dsh-jev-advisor'
+#         config:
+#           endpoint: https://api.typesafe.ai/v1/systemone
+#           model: jev-latest
+#           includeTranscript: true
+#           transcriptMessages: 12
+#           timeoutMs: 30000
+#
+# Double-mount guard. An aggregate bundle (for example a "web UI pack") may
+# mount this package under its OWN entry id, which would register the settings
+# namespace and the `/dsh-jev-advisor/api` routes twice and fail the whole
+# plugin tree at boot. The `!!js` expression backs THIS row off when another
+# *enabled* entry already mounts `dsh-jev-advisor`. The loader evaluates it when
+# this row is processed, so only rows before this one are visible — which is the
+# standard order, since `dsh plugin add` appends new bundles last. The reverse
+# order is a known limitation: the guard cannot see rows that come after it.
+- insert:
+    - id: dsh-jev-advisor
+      name: 'dsh-jev-advisor'
+      disabled: !!js "[...ctx.loader.entries()].some((e) => e.options.name === 'dsh-jev-advisor' && e.options.id !== 'dsh-jev-advisor' && !e.disabled)"

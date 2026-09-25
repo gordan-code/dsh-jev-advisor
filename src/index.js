@@ -6,9 +6,13 @@
  * System One) opinion. This half owns everything that must not live in the
  * browser:
  *
- * - the API key and the other connection settings, through the standard
- *   `ctx.settings` service (namespace `dsh-jev-advisor`), so they persist in the user's
- *   settings document and can be edited from Settings -> Jev;
+ * - the API key and the other connection settings. There is no private settings
+ *   namespace anymore: the plugin's own `Config` IS the settings schema, every
+ *   user-facing field is marked `.volatile()`, and the DSH settings service
+ *   projects them into an editable form keyed by this plugin's profile entry id
+ *   (`dsh-jev-advisor`). Edits persist through the current profile's Cordis
+ *   patch. The browser writes through `ctx.configForms`; this half reads the
+ *   live values with `config.<field>.get()` at request time;
  * - the session transcript used as Jev's `state`, read from `ctx.sessions`;
  * - the outbound HTTPS call to the TypeSafe evaluation endpoint;
  * - two loopback-only JSON routes, `/dsh-jev-advisor/api/status` and
@@ -27,15 +31,12 @@ import z from '@deepseek-ai/schemastery'
 export const name = 'dsh-jev-advisor'
 
 /**
- * Required host services. `webServer` carries the two routes and `settings`
- * would be nice to have but is registered through `ctx.inject` below so a
- * profile without a settings provider still boots (composition config is the
- * fallback).
+ * Required host services. `webServer` carries the three routes. The settings
+ * service is optional: it is only contacted through `ctx.inject` below to opt
+ * the auto-generated form out, so a profile without it still boots and reads
+ * the composition config.
  */
 export const inject = ['webServer']
-
-/** Settings namespace owned by this plugin. */
-const SETTINGS_NS = 'dsh-jev-advisor'
 
 /** Route prefix owned by this plugin. Exact routes are matched before prefixes. */
 const ROUTE_PREFIX = '/dsh-jev-advisor/api'
@@ -50,32 +51,25 @@ const NONE_KEY = '__none_of_the_above__'
 /** Rough ceiling on the `state` we are willing to send (Jev allows 32k for state + longest question). */
 const MAX_STATE_CHARS = 24000
 
-/** Composition-level defaults; the user settings section resolves above them. */
-export const Config = z.object({
-  apiKey: z.string().role('secret').default(''),
-  endpoint: z.string().default(DEFAULT_ENDPOINT),
-  model: z.string().default(DEFAULT_MODEL),
-  enabled: z.boolean().default(true),
-  includeTranscript: z.boolean().default(true),
-  transcriptMessages: z.number().step(1).min(0).max(100).default(12),
-  timeoutMs: z.number().step(1).min(1000).max(180000).default(30000),
-})
-
 /**
- * User-facing settings schema.
+ * The plugin's configuration — and, since DSH dropped the separate settings
+ * namespace API, its settings schema too. The settings service projects every
+ * `.volatile()` field into an editable form keyed by this plugin's profile
+ * entry id; `apply(ctx, config)` receives the live values as `Volatile`
+ * wrappers read with `.get()`.
  *
  * `apiKey` carries `role('secret')`, so the settings wire strips it from every
- * read: the browser can write it and can learn whether one is stored (through
+ * read: the browser can write it and learn whether one is stored (via
  * `/dsh-jev-advisor/api/status`), but never reads the value back.
  */
-export const JevSettings = z.object({
-  apiKey: z.string().role('secret').default(''),
-  endpoint: z.string().default(DEFAULT_ENDPOINT),
-  model: z.string().default(DEFAULT_MODEL),
-  enabled: z.boolean().default(true),
-  includeTranscript: z.boolean().default(true),
-  transcriptMessages: z.number().step(1).min(0).max(100).default(12),
-  timeoutMs: z.number().step(1).min(1000).max(180000).default(30000),
+export const Config = z.object({
+  apiKey: z.string().role('secret').default('').volatile(),
+  endpoint: z.string().default(DEFAULT_ENDPOINT).volatile(),
+  model: z.string().default(DEFAULT_MODEL).volatile(),
+  enabled: z.boolean().default(true).volatile(),
+  includeTranscript: z.boolean().default(true).volatile(),
+  transcriptMessages: z.number().step(1).min(0).max(100).default(12).volatile(),
+  timeoutMs: z.number().step(1).min(1000).max(180000).default(30000).volatile(),
 })
 
 /** Failure with a stable code, surfaced verbatim to the browser half. */
@@ -501,39 +495,32 @@ async function readJsonBody(request, limit = 1024 * 1024) {
  * @param config - composition config from the cordis row (see {@link Config}).
  */
 export function apply(ctx, config) {
-  const composition = {
-    apiKey: typeof config?.apiKey === 'string' ? config.apiKey : '',
-    endpoint: typeof config?.endpoint === 'string' ? config.endpoint : DEFAULT_ENDPOINT,
-    model: typeof config?.model === 'string' ? config.model : DEFAULT_MODEL,
-    enabled: config?.enabled !== false,
-    includeTranscript: config?.includeTranscript !== false,
-    transcriptMessages: typeof config?.transcriptMessages === 'number' ? config.transcriptMessages : 12,
-    timeoutMs: typeof config?.timeoutMs === 'number' ? config.timeoutMs : 30000,
+  // Read a Config field that may be a `Volatile` wrapper (`.volatile()`) or a
+  // plain value. Volatile fields are read fresh on every call, so a live edit
+  // from the settings page takes effect on the next request without a remount.
+  const read = (field, fallback) => {
+    const value = field !== undefined && field !== null && typeof field.get === 'function' ? field.get() : field
+    return value === undefined || value === null ? fallback : value
   }
 
-  /** Live settings scope, once a settings provider is mounted. */
-  let scope
-
+  // This plugin ships its own Settings -> Jev page, so opt the auto-generated
+  // Config form out. The schema above is still the source of editable fields;
+  // this only keeps a duplicate form from rendering once an auto client ships.
   ctx.inject(['settings'], (sctx) => {
-    // The plain string is deliberate. `@deepseek-ai/dsh-settings` validates it
-    // inside `register()` (its `parseSettingsNamespace`), and the branding
-    // helper some plugins use for it is NOT exported by the npm-published build
-    // of that package — importing it would break this plugin on any host whose
-    // dsh-settings comes from the registry rather than the desktop bundle.
-    scope = sctx.settings.register(SETTINGS_NS, JevSettings, { base: config ?? {} })
-    ctx.logger?.info?.(`dsh-jev-advisor: settings namespace ${SETTINGS_NS} registered`)
+    sctx.effect(() => sctx.settings.configure({ auto: false }, ctx.fiber), 'dsh-jev-advisor: settings presentation')
   })
 
-  /**
-   * Resolve the effective settings.
-   *
-   * The settings service is the source of truth while it is mounted; the
-   * composition config is the fallback, so a profile without a settings
-   * provider still runs (with no API key, which surfaces as a clear 409).
-   */
+  /** Resolve the effective settings from the live volatile Config. */
   const resolved = () => {
-    const fromSettings = scope === undefined ? undefined : scope.get()
-    const value = fromSettings === undefined ? composition : { ...composition, ...fromSettings }
+    const value = {
+      apiKey: read(config?.apiKey, ''),
+      endpoint: read(config?.endpoint, DEFAULT_ENDPOINT),
+      model: read(config?.model, DEFAULT_MODEL),
+      enabled: read(config?.enabled, true),
+      includeTranscript: read(config?.includeTranscript, true),
+      transcriptMessages: read(config?.transcriptMessages, 12),
+      timeoutMs: read(config?.timeoutMs, 30000),
+    }
     return {
       apiKey: typeof value.apiKey === 'string' ? value.apiKey : '',
       endpoint: typeof value.endpoint === 'string' && value.endpoint.trim() !== '' ? value.endpoint.trim() : DEFAULT_ENDPOINT,
@@ -579,7 +566,6 @@ export function apply(ctx, config) {
         includeTranscript: settings.includeTranscript,
         transcriptMessages: settings.transcriptMessages,
         timeoutMs: settings.timeoutMs,
-        settingsMounted: scope !== undefined,
       },
     })
   })

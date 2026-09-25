@@ -10,7 +10,7 @@ window.__ModuleLoader__.load({
 
 		/** Dictionary namespace owned by this plugin. */
 		const NS = 'dsh-jev-advisor'
-		/** Settings namespace owned by the host half. */
+		/** Profile entry id the Host projects this plugin's Config form under. */
 		const SETTINGS_NAMESPACE = 'dsh-jev-advisor'
 		/** Loopback-only JSON bridge mounted by the host half. */
 		const API = '/dsh-jev-advisor/api'
@@ -897,7 +897,7 @@ window.__ModuleLoader__.load({
 		 * ------------------------------------------------------------------ */
 
 		/** Client services this plugin consumes. */
-		const inject = ['slots', 'locale', 'settingsScope']
+		const inject = ['slots', 'locale', 'configForms']
 
 		/**
 		 * Register the dictionaries, the frame-wide advice overlay, and the
@@ -907,7 +907,11 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-jev-advisor: dictionaries')
 
-			const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NAMESPACE })
+			// `SETTINGS_NAMESPACE` is the plugin's profile entry id, which is also
+			// the key the Host settings service projects this plugin's `Config`
+			// form under. `configForms.get` returns a ConfigFormController with the
+			// same read/write face the deprecated `settingsScope.bind` had.
+			const scope = ctx.configForms.get(SETTINGS_NAMESPACE)
 
 			ctx.slots.inject('shell.overlay', () =>
 				ctx.slots.register(

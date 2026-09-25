@@ -52,8 +52,8 @@ card is untouched and still works exactly as before.
 ## Install
 
 Publishing to npm is **not required** — `dsh plugin` forwards to pnpm, so any spec pnpm can install
-works. Pick one; **do not mix them**, because two installs of the same package register the settings
-namespace and the API routes twice and fail the whole plugin tree.
+works. Pick one; **do not mix them**, because two installs of the same package mount the loader entry
+and the API routes twice and fail the whole plugin tree.
 
 ### Straight from the repository
 
@@ -103,7 +103,7 @@ inside the profile directory). There is no semver range unless you write
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| API key | *(empty)* | TypeSafe key from <https://console.typesafe.ai/keys>. Stored as a `role('secret')` settings field: it persists in your DSH settings document and is never sent back to the browser. |
+| API key | *(empty)* | TypeSafe key from <https://console.typesafe.ai/keys>. Declared `role('secret')` in the `Config`, so it persists in your profile's Cordis patch as a redacted secret and is never sent back to the browser. |
 | Endpoint | `https://api.typesafe.ai/v1/systemone` | Evaluation endpoint. |
 | Model | `jev-latest` | Jev model or alias (`jev-1.13.0`, `jev-preview`, …). |
 | Enable Jev advice | on | Master switch. |
@@ -122,7 +122,7 @@ deployment must pin — an endpoint in a headless profile, for example.
 
 | Half | File | Responsibility |
 | --- | --- | --- |
-| Host | `lib/index.js` | `dsh-jev-advisor` settings namespace, session transcript read, outbound TypeSafe call, three loopback-only JSON routes. |
+| Host | `lib/index.js` | The `Config` schema (the settings source of truth), session transcript read, outbound TypeSafe call, three loopback-only JSON routes. |
 | Browser | `lib/client.js` | The floating advice card and the Settings → Jev section. |
 
 The two halves talk over same-origin `fetch` to the host's own webserver:
@@ -216,13 +216,18 @@ plugin's internals.
 
 ## Known limitations
 
+- **Requires a DSH whose settings service projects `Config` forms (0.1.7-rc.1 or newer).** DSH removed
+  the `settings.register` / settings-namespace API this plugin was originally written against, and
+  with it the `settingsScope` client service. On 0.1.5-rc.2 and earlier the host half would call a
+  method that no longer exists and the browser half would never resolve `configForms`, so the plugin
+  does not load at all. There is no dual-API fallback — DSH is a fast-moving developer preview.
 - The card floats at the top right and can overlap a wide right sidebar; dismiss it with `✕`.
 - With more than one session holding a pending question at once, the card follows the current
   session and falls back to the first pending interaction.
 - Plan-review questions are advised like any other option-bearing question; the card never replaces
   the approve/refuse buttons.
 - The API key round-trips to the host process, which is what performs the HTTPS call. It is never
-  returned to the browser, but it is stored in your DSH settings document in plain text — protect
+  returned to the browser, but it is stored in plain text in your profile's Cordis patch — protect
   that file as you would any credential.
 - Jev is charged per input token. The transcript tail is capped at ~24k characters per request.
 - No retry beyond the two documented overload codes (`429`, `529`).
@@ -231,8 +236,8 @@ plugin's internals.
 
 `dsh-jev` is taken on npm (`zhangxaochen/dsh-jev`, v0.2.0) and at least five GitHub repositories
 share the name, so this one is namespaced `dsh-jev-advisor` — and every identifier it owns
-(settings namespace, API route prefix, locale namespace, loader entry id) is namespaced to match. It
-can therefore sit beside those plugins without a duplicate-namespace boot failure.
+(settings entry id, API route prefix, locale namespace, loader entry id) is namespaced to match. It
+can therefore sit beside those plugins without a duplicate-entry boot failure.
 
 The Jev plugins already out there are worth your attention:
 

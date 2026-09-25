@@ -45,18 +45,8 @@ import type Schema from '@deepseek-ai/schemastery'
 export declare const name: 'dsh-jev-advisor'
 /** Required host services. */
 export declare const inject: readonly string[]
-/** Composition-level defaults for the plugin row's \`config\`. */
+/** Configuration — which doubles as the settings schema. Editable fields are marked volatile. */
 export declare const Config: Schema<{
-  apiKey: string
-  endpoint: string
-  model: string
-  enabled: boolean
-  includeTranscript: boolean
-  transcriptMessages: number
-  timeoutMs: number
-}>
-/** User-facing settings schema registered under the \`dsh-jev-advisor\` namespace. */
-export declare const JevSettings: Schema<{
   apiKey: string
   endpoint: string
   model: string

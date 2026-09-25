@@ -47,7 +47,7 @@ DeepSeek Harness 上现有的 Jev 插件，几乎都是把 Jev 交给 agent。�
 ## 安装
 
 **不必须发布到 npm**——`dsh plugin` 只是 pnpm 的转发器，pnpm 能装的 spec 都能用。任选一种，
-**不要混用**：同一个包装两次会把设置命名空间和 API 路由各注册一遍，整个插件树会加载失败。
+**不要混用**：同一个包装两次会把 loader entry 和 API 路由各挂一遍，整个插件树会加载失败。
 
 ### 直接从仓库
 
@@ -96,7 +96,7 @@ git 安装跟踪的是你当时给的那个 ref，所以更新 = 重跑一次 `a
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| API Key | *空* | TypeSafe 密钥，来自 <https://console.typesafe.ai/keys>。以 `role('secret')` 设置字段保存：写进你的 DSH 设置文档，且永远不会回传给浏览器。 |
+| API Key | *空* | TypeSafe 密钥，来自 <https://console.typesafe.ai/keys>。在 `Config` 里声明为 `role('secret')`：以脱敏秘密的形式写进 profile 的 Cordis patch，且永远不会回传给浏览器。 |
 | 接口地址 | `https://api.typesafe.ai/v1/systemone` | 评测端点。 |
 | 模型 | `jev-latest` | Jev 模型或别名（`jev-1.13.0`、`jev-preview` 等）。 |
 | 启用 Jev 建议 | 开 | 总开关。 |
@@ -113,7 +113,7 @@ git 安装跟踪的是你当时给的那个 ref，所以更新 = 重跑一次 `a
 
 | 半边 | 文件 | 职责 |
 | --- | --- | --- |
-| Host | `lib/index.js` | `dsh-jev-advisor` 设置命名空间、读取会话记录、对外发起 TypeSafe 调用、三条仅限回环的 JSON 路由。 |
+| Host | `lib/index.js` | `Config`（兼作设置 schema）、读取会话记录、对外发起 TypeSafe 调用、三条仅限回环的 JSON 路由。 |
 | Browser | `lib/client.js` | 浮动建议卡片与「设置 → Jev」面板。 |
 
 两半之间用同源 `fetch` 走宿主自己的 webserver：
@@ -187,19 +187,23 @@ cordis 服务（`ctx.slots`、`ctx.locale`、`ctx.settingsScope`）或宿主 HTT
 
 ## 已知限制
 
+- **需要设置服务会把 `Config` 投影成表单的 DSH（0.1.7-rc.1 或更新）。** 本插件最初是照 `settings.register` /
+  设置命名空间那套 API 写的，DSH 已经把它连同客户端的 `settingsScope` 一起删掉。在 0.1.5-rc.2 及更早版本上，
+  宿主半边会调用一个已不存在的方法，浏览器半边也永远解析不到 `configForms`，插件根本不会加载。
+  没有做双 API 兼容——DSH 是迭代很快的开发者预览版。
 - 卡片浮在右上角，右栏很宽时可能重叠；点 `✕` 关闭。
 - 同时有多个会话挂着待答问题时，卡片跟随当前会话，否则回退到第一个待答交互。
 - 计划评审（plan-review）问题会和其它带选项的问题一样获得建议；卡片不会取代批准/拒绝按钮。
-- API Key 会传到宿主进程（HTTPS 调用在宿主发起）。它不会回传浏览器，但会以明文保存在你的 DSH
-  设置文档里——请像对待任何凭证一样保护该文件。
+- API Key 会传到宿主进程（HTTPS 调用在宿主发起）。它不会回传浏览器，但会以明文保存在 profile 的
+  Cordis patch 里——请像对待任何凭证一样保护该文件。
 - Jev 按输入 token 计费。每次请求的会话记录上限约 24k 字符。
 - 除文档化的两个过载码（`429`、`529`）外不做重试。
 
 ## 前作，以及为什么这个包不叫 `dsh-jev`
 
 `dsh-jev` 在 npm 上已被占用（`zhangxaochen/dsh-jev`，v0.2.0），GitHub 上至少还有五个同名仓库，
-所以本包命名为 `dsh-jev-advisor`——它拥有的每一个标识（设置命名空间、API 路由前缀、locale 命名空间、
-loader entry id）都跟着加了同样的命名空间。因此它可以和那些插件共存，不会撞命名空间导致启动失败。
+所以本包命名为 `dsh-jev-advisor`——它拥有的每一个标识（设置 entry id、API 路由前缀、locale 命名空间、
+loader entry id）都加了同样的命名空间。因此它可以和那些插件共存，不会撞 entry 导致启动失败。
 
 已经存在的 Jev 插件值得你去看：
 

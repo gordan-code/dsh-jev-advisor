@@ -48,7 +48,7 @@ const exports_ = registration.factory((specifier) => {
 	throw new Error(`unexpected require("${specifier}") — the client bundle may only use platform seed modules`)
 })
 
-assert.deepEqual([...exports_.inject], ['slots', 'locale', 'settingsScope'])
+assert.deepEqual([...exports_.inject], ['slots', 'locale', 'configForms'])
 assert.equal(typeof exports_.apply, 'function')
 const { internals } = exports_
 
@@ -58,7 +58,6 @@ const { internals } = exports_
 
 const registered = []
 const dictionaries = []
-const bound = []
 
 const ctx = {
 	effect(callback) {
@@ -81,9 +80,9 @@ const ctx = {
 			return () => {}
 		},
 	},
-	settingsScope: {
-		bind(spec) {
-			bound.push(spec)
+	configForms: {
+		get(entryId) {
+			got.push(entryId)
 			return {
 				subscribe: () => () => {},
 				getSnapshot: () => ({ status: 'ready', value: { enabled: true, endpoint: 'https://api.typesafe.ai/v1/systemone', model: 'jev-latest' }, revision: 1 }),
@@ -93,9 +92,10 @@ const ctx = {
 	},
 }
 
+const got = []
 exports_.apply(ctx)
 
-assert.deepEqual(bound, [{ namespace: 'dsh-jev-advisor' }], 'the settings scope is bound once, in the plugin fiber')
+assert.deepEqual(got, ['dsh-jev-advisor'], 'the form is fetched once, in the plugin fiber')
 assert.deepEqual(dictionaries.map((entry) => entry.namespace), ['dsh-jev-advisor'])
 
 const overlay = registered.find((entry) => entry.options.name === 'shell.overlay')
@@ -202,7 +202,7 @@ const t = (key, params) => {
 }
 
 const settingsMarkup = renderToStaticMarkup(
-	React.createElement(internals.JevSettingsSection, { t, scope: ctx.settingsScope.bind({ namespace: 'dsh-jev-advisor' }), close: () => {} }),
+	React.createElement(internals.JevSettingsSection, { t, scope: ctx.configForms.get('dsh-jev-advisor'), close: () => {} }),
 )
 assert.match(settingsMarkup, /Jev decision advice/, 'the settings section renders its title')
 assert.match(settingsMarkup, /API key/)
@@ -213,7 +213,7 @@ assert.match(settingsMarkup, /jev-latest/, 'the model field shows the resolved v
 const emptyOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
-		scope: ctx.settingsScope.bind({ namespace: 'dsh-jev-advisor' }),
+		scope: ctx.configForms.get('dsh-jev-advisor'),
 		useSessions: (select) => select({ current: 'session-a' }),
 		useSessionPendingInteraction: (select) => select(new Map()),
 	}),
@@ -223,7 +223,7 @@ assert.equal(emptyOverlay, '', 'the card stays out of the way when nothing is pe
 const pendingOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
-		scope: ctx.settingsScope.bind({ namespace: 'dsh-jev-advisor' }),
+		scope: ctx.configForms.get('dsh-jev-advisor'),
 		useSessions: (select) => select({ current: 'session-a' }),
 		useSessionPendingInteraction: (select) => select(new Map([['session-a', interaction]])),
 	}),
@@ -240,7 +240,7 @@ assert.doesNotMatch(
 const approvalOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
-		scope: ctx.settingsScope.bind({ namespace: 'dsh-jev-advisor' }),
+		scope: ctx.configForms.get('dsh-jev-advisor'),
 		useSessions: (select) => select({ current: 'session-a' }),
 		useSessionPendingInteraction: (select) => select(new Map([['session-a', { key: 'approval:1', sessionId: 'session-a', kind: 'approval' }]])),
 	}),

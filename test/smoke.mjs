@@ -9,7 +9,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { buildJevRequest, mapAdvice, JevSettings } from '../lib/index.js'
+import { buildJevRequest, mapAdvice, Config } from '../lib/index.js'
 
 const questions = [
   {
@@ -77,9 +77,13 @@ const multiAdvice = mapAdvice(multiBuilt.plan, {
 assert.deepEqual(multiAdvice[0].picks.map((pick) => pick.label), ['lint', 'typecheck'], 'only options above the threshold are picked')
 assert.equal(multiAdvice[0].probabilities.length, 3)
 
-assert.throws(() => JevSettings({ apiKey: 42 }), 'the settings schema rejects a non-string key')
-assert.equal(JevSettings({}).apiKey, '', 'the key defaults to empty rather than undefined')
-assert.equal(JevSettings({}).endpoint, 'https://api.typesafe.ai/v1/systemone')
-assert.equal(JevSettings({ endpoint: 'https://example.test/v1/systemone' }).endpoint, 'https://example.test/v1/systemone')
+// `Config` doubles as the settings schema: it exposes the same fields, now
+// volatile. Validation still rejects a non-string key; calling it returns the
+// (volatile-wrapped) value, so unwrap `.get()` to inspect defaults.
+assert.throws(() => Config({ apiKey: 42 }), 'the config schema rejects a non-string key')
+const plainDefaults = Config({ apiKey: '' })
+assert.equal(plainDefaults.apiKey.get(), '', 'the key defaults to empty rather than undefined')
+assert.equal(plainDefaults.endpoint.get(), 'https://api.typesafe.ai/v1/systemone')
+assert.equal(Config({ endpoint: 'https://example.test/v1/systemone' }).endpoint.get(), 'https://example.test/v1/systemone')
 
 process.stdout.write('dsh-jev-advisor smoke: all assertions passed\n')

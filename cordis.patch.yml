@@ -10,21 +10,23 @@
 # seeing this declaration, appends `dsh-jev-advisor` to the bundle stack.
 # Profile boot then merges THIS patch (a single `insert` of the plugin row).
 #
-# The host row mounts the plugin: it registers the `dsh-jev-advisor` settings
-# namespace, the loopback-only `/dsh-jev-advisor/api/*` routes, and (through
-# `dsh.client`) the browser half. No profile file edits are needed.
+# The host row mounts the plugin: it exposes the loopback-only
+# `/dsh-jev-advisor/api/*` routes and (through `dsh.client`) the browser half.
+# The plugin's `Config` is its settings schema — its editable (`.volatile()`)
+# fields are projected into the Settings form under this entry id, and edits
+# persist through the profile's Cordis patch. No profile file edits are needed.
 #
 # Why the package is not called `dsh-jev`: the name is taken on npm
 # (`zhangxaochen/dsh-jev`, v0.2.0) and at least five GitHub repositories share
 # it. Every identifier this plugin owns is namespaced to match, so it can sit
-# beside those plugins without a duplicate-namespace or duplicate-route boot
+# beside those plugins without a duplicate-entry or duplicate-route boot
 # failure.
 #
-# Optional composition config. Every field is overridden by the user settings
-# section once the user saves anything in Settings -> Jev, so seed only what a
-# deployment must pin (a headless profile pinning an endpoint, for example).
-# `apiKey` here is a convenience for deployments without a settings provider;
-# the Settings -> Jev field is the normal path.
+# Optional composition config. Every volatile field is overridable from
+# Settings -> Jev once the user saves there, so seed only what a deployment must
+# pin (a headless profile pinning an endpoint, for example). `apiKey` here is a
+# convenience for deployments without a settings UI; the Settings -> Jev field
+# is the normal path.
 #
 #   - insert:
 #       - id: dsh-jev-advisor

@@ -214,8 +214,7 @@ const emptyOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
 		scope: ctx.configForms.get('dsh-jev-advisor'),
-		useSessions: (select) => select({ current: 'session-a' }),
-		useSessionPendingInteraction: (select) => select(new Map()),
+		useSessionStatus: (select) => select(new Map()),
 	}),
 )
 assert.equal(emptyOverlay, '', 'the card stays out of the way when nothing is pending')
@@ -224,8 +223,11 @@ const pendingOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
 		scope: ctx.configForms.get('dsh-jev-advisor'),
-		useSessions: (select) => select({ current: 'session-a' }),
-		useSessionPendingInteraction: (select) => select(new Map([['session-a', interaction]])),
+		useSessionStatus: (select) => select(new Map([['session-a', {
+			running: false,
+			pendingInteraction: interaction,
+			completionUnread: false,
+		}]])),
 	}),
 )
 assert.match(pendingOverlay, /data-dsh-jev-advisor="advice"/, 'the card mounts for a pending option-bearing question')
@@ -241,8 +243,11 @@ const approvalOverlay = renderToStaticMarkup(
 	React.createElement(internals.JevAdviceOverlay, {
 		t,
 		scope: ctx.configForms.get('dsh-jev-advisor'),
-		useSessions: (select) => select({ current: 'session-a' }),
-		useSessionPendingInteraction: (select) => select(new Map([['session-a', { key: 'approval:1', sessionId: 'session-a', kind: 'approval' }]])),
+		useSessionStatus: (select) => select(new Map([['session-a', {
+			running: false,
+			pendingInteraction: { key: 'approval:1', sessionId: 'session-a', kind: 'approval' },
+			completionUnread: false,
+		}]])),
 	}),
 )
 assert.equal(approvalOverlay, '', 'an approval interaction is left to its own UI')

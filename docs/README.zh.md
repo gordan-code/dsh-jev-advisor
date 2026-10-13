@@ -254,8 +254,11 @@ npm run quality
 ```
 
 `test:install` 在临时目录生成真实 npm `.tgz`，再在全新临时 profile 中执行
-`npm install --offline --ignore-scripts`。Peer 依赖须已在 npm 缓存中，缺失时直接失败，
-不联网补装，也不回退到源码链接。测试通过 profile 的 bundle 栈加载压缩包内的
+`npm install --offline --ignore-scripts`，使用空 npm 缓存和不可达的注册表地址。
+Peer 及其必需依赖闭包从 `npm ci` 已安装的依赖本地打包，并核对 `package-lock.json` 版本，
+与插件一起以真实 tarball 安装。npm 仍校验 peer 范围，不使用 `--legacy-peer-deps`，
+不联网补装、不回退源码链接，也不依赖注册表元数据缓存。此测试验证锁定依赖下的打包和加载，
+不验证实时注册表可用性。测试通过 profile 的 bundle 栈加载压缩包内的
 `cordis.patch.yml`，验证实际建议请求、DSH 客户端启动图及宿主提供的客户端模块；
 同时断言插件目录是实际安装文件而非 junction。结束后清理所属进程、压缩包和临时 profile，
 不使用真实 Key 或用户 profile。

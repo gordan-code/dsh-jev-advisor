@@ -298,8 +298,12 @@ npm run quality
 ```
 
 `test:install` packs the already-built artifacts into a real `.tgz` under a temporary directory,
-then runs `npm install --offline --ignore-scripts` in a fresh scratch profile. Peer dependencies
-must be available in the npm cache; there is no online or source-link fallback. The test loads
+then runs `npm install --offline --ignore-scripts` in a fresh scratch profile with an empty npm
+cache and an unreachable registry. Peer dependencies and their required dependency closure are
+packed locally from the versions installed by `npm ci`, checked against `package-lock.json`, and
+installed as real tarballs alongside the plugin. npm still validates peer ranges; there is no
+`--legacy-peer-deps`, online fallback, source link, or dependency on registry metadata caching.
+This verifies packaging/loading against the locked peer fixture, not live registry availability. The test loads
 the package's shipped `cordis.patch.yml` through the profile bundle stack, checks live host advice,
 and verifies the installed client is in DSH's boot graph and is served as a valid client module.
 The plugin directory is asserted to contain real installed files, not a junction, and all owned

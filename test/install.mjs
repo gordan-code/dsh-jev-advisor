@@ -27,13 +27,22 @@ test('真实 npm 压缩包安装后通过包内 patch 加载宿主与客户端�
     for (const path of ['lib/index.js', 'lib/client.js', 'lib/types/index.d.ts', 'lib/types/client/index.d.ts', 'cordis.patch.yml', 'package.json']) assert.ok(files.includes(path), `${path} is shipped`)
     assert.equal(files.some((path) => /^(src|test|node_modules|helloagents)\//.test(path) || /AGENTS\.md$/i.test(path)), false)
     mock = await createMockTypeSafeServer({ port: 0 })
-    host = await startHost({ packageTarball: join(root, metadata.filename), mock, apiKey: ACCEPTED_KEY, requireConfirmation: true })
+    const npmCache = join(root, 'empty-cache')
+    assert.equal(existsSync(npmCache), false, 'installation cannot inherit registry metadata from a historical cache')
+    host = await startHost({ packageTarball: join(root, metadata.filename), npmCache, mock, apiKey: ACCEPTED_KEY, requireConfirmation: true })
     const installed = host.pluginLink
     assert.equal((await lstat(installed)).isSymbolicLink(), false, 'installed package must be real files, not a source junction')
     assert.equal(await realpath(installed), installed)
     assert.equal(existsSync(join(installed, 'src')), false)
     const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'))
     assert.equal(manifest.version, metadata.version)
+    const lock = JSON.parse(await readFile(join(PROJECT_ROOT, 'package-lock.json'), 'utf8'))
+    for (const name of Object.keys(manifest.peerDependencies)) {
+      const directory = join(host.profile, 'node_modules', name)
+      assert.equal((await lstat(directory)).isSymbolicLink(), false, `${name} must also be installed as real files`)
+      const peer = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
+      assert.equal(peer.version, lock.packages[`node_modules/${name}`].version)
+    }
     const profile = JSON.parse(await readFile(join(host.profile, 'package.json'), 'utf8'))
     assert.ok(profile.dsh.profile.bundles.includes(manifest.name), 'load the shipped bundle patch, not a test-authored insert')
     const status = await expectJson(host, '/dsh-jev-advisor/api/status', { method: 'GET' }, 200)

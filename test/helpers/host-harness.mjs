@@ -65,7 +65,39 @@ function yamlString(value) {
   return JSON.stringify(String(value))
 }
 
-async function createProfile(home, { endpoint, apiKey, requireConfirmation = false, redactSensitive = true, projectRoot = PROJECT_ROOT, packageTarball }) {
+/** 将 npm ci 已锁定的 peer 闭包打成真实 tarball，不依赖注册表元数据缓存。 */
+async function packPeerFixtures(home, projectRoot, npmCli, env) {
+  const manifest = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
+  const lock = JSON.parse(await readFile(join(projectRoot, 'package-lock.json'), 'utf8'))
+  const queue = Object.keys(manifest.peerDependencies ?? {})
+  const seen = new Set(), directories = []
+  while (queue.length) {
+    const name = queue.shift()
+    if (seen.has(name)) continue
+    seen.add(name)
+    const directory = join(projectRoot, 'node_modules', name)
+    const pkg = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
+    assert.equal(pkg.name, name)
+    assert.equal(pkg.version, lock.packages[`node_modules/${name}`]?.version, `${name} fixture must match package-lock.json; run npm ci`)
+    directories.push(directory)
+    queue.push(...Object.keys(pkg.dependencies ?? {}))
+    queue.push(...Object.keys(pkg.peerDependencies ?? {}).filter((peer) => pkg.peerDependenciesMeta?.[peer]?.optional !== true))
+  }
+  const destination = join(home, 'peer-tarballs')
+  await mkdir(destination)
+  const result = spawnSync(process.execPath, [npmCli, 'pack', ...directories, '--json', '--offline', '--ignore-scripts', '--pack-destination', destination], {
+    cwd: home, env, encoding: 'utf8', windowsHide: true, timeout: 90_000, maxBuffer: MAX_OUTPUT,
+  })
+  assert.equal(result.status, 0, `packing locked peer fixtures failed: ${result.error ?? ''}\n${result.stderr}`)
+  const packed = JSON.parse(result.stdout)
+  assert.equal(packed.length, seen.size)
+  return packed.map(({ filename }) => {
+    assert.equal(filename, filename.replace(/^.*[\\/]/, ''), 'peer tarball filename must be local')
+    return join(destination, filename)
+  })
+}
+
+async function createProfile(home, { endpoint, apiKey, requireConfirmation = false, redactSensitive = true, projectRoot = PROJECT_ROOT, packageTarball, npmCache }) {
   const profile = join(home, 'profiles', 'scratch')
   const nodeModules = join(profile, 'node_modules')
   const pluginLink = join(nodeModules, 'dsh-jev-advisor')
@@ -100,12 +132,14 @@ async function createProfile(home, { endpoint, apiKey, requireConfirmation = fal
   } }]
   await writeFile(join(profile, 'cordis.patch.yml'), packageTarball ? JSON.stringify(overrides, null, 2) : patch, 'utf8')
   if (packageTarball !== undefined) {
-    // 安装真实 tarball，自动 peer 解析必须成功；禁止脚本、联网及回退到源码链接。
+    // Peer 也来自本地真实 tarball，npm 仍校验 peer 版本；不用 legacy-peer-deps。
     const npmCli = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')
-    const result = spawnSync(process.execPath, [npmCli, 'install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', '--omit=dev', resolve(packageTarball)], {
-      cwd: profile, encoding: 'utf8', windowsHide: true, timeout: 90_000, maxBuffer: MAX_OUTPUT,
+    const env = { ...process.env, npm_config_cache: npmCache ?? join(home, 'npm-cache'), npm_config_registry: 'http://127.0.0.1:1', npm_config_update_notifier: 'false' }
+    const peers = await packPeerFixtures(home, projectRoot, npmCli, env)
+    const result = spawnSync(process.execPath, [npmCli, 'install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', '--omit=dev', resolve(packageTarball), ...peers], {
+      cwd: profile, env, encoding: 'utf8', windowsHide: true, timeout: 90_000, maxBuffer: MAX_OUTPUT,
     })
-    assert.equal(result.status, 0, `isolated tarball install failed (offline peers must be cached): ${result.error ?? ''}\n${result.stdout}\n${result.stderr}`)
+    assert.equal(result.status, 0, `isolated tarball install failed (locked local peer fixtures): ${result.error ?? ''}\n${result.stdout}\n${result.stderr}`)
     assert.equal(lstatSync(pluginLink).isSymbolicLink(), false, 'tarball installation must not be a link')
     return { profile, pluginLink }
   }
@@ -185,6 +219,7 @@ export async function startHost(options = {}) {
       redactSensitive: options.redactSensitive,
       projectRoot: options.projectRoot ?? PROJECT_ROOT,
       packageTarball: options.packageTarball,
+      npmCache: options.npmCache,
     })
     cleanupLinks.push(profile.pluginLink)
     child = spawn(process.execPath, [

@@ -40,7 +40,7 @@ globalThis.window = {
 	},
 }
 
-await import('../lib/client.js')
+await import(process.env.DSH_CLIENT_SOURCE === 'src' ? '../src/client.js' : '../lib/client.js')
 
 assert.equal(registration.id, 'dsh-jev-advisor', 'the bundle registers under its package name')
 const exports_ = registration.factory((specifier) => {
@@ -48,7 +48,7 @@ const exports_ = registration.factory((specifier) => {
 	throw new Error(`unexpected require("${specifier}") — the client bundle may only use platform seed modules`)
 })
 
-assert.deepEqual([...exports_.inject], ['slots', 'locale', 'configForms'])
+assert.deepEqual([...exports_.inject], ['slots', 'locale', 'configForms', 'uiSession'])
 assert.equal(typeof exports_.apply, 'function')
 const { internals } = exports_
 
@@ -60,6 +60,7 @@ const registered = []
 const dictionaries = []
 
 const ctx = {
+	uiSession: { adapter: { current: { subscribe: () => () => {}, getSnapshot: () => ({ key: 'session-a' }) } } },
 	effect(callback) {
 		const dispose = callback()
 		return typeof dispose === 'function' ? dispose : () => {}
@@ -103,7 +104,7 @@ const section = registered.find((entry) => entry.options.name === 'settings.sect
 assert.ok(overlay !== undefined, 'the advice card claims a shell.overlay cell')
 assert.equal(overlay.options.id, 'dsh-jev-advisor-card')
 assert.equal(typeof overlay.options.inject, 'function')
-assert.deepEqual(Object.keys(overlay.options.inject()), ['scope'], 'the card receives the settings scope')
+assert.deepEqual(Object.keys(overlay.options.inject()), ['scope', 'mainSession'], 'the card receives settings and the public current-Session binding store')
 
 assert.ok(section !== undefined, 'the settings section claims a settings.section cell')
 assert.equal(section.options.id, 'jev')
@@ -186,7 +187,8 @@ const multiAdvice = [{
 	kind: 'noul-set',
 	supported: true,
 	answered: true,
-	picks: [{ index: 0, label: 'lint', probability: 0.9 }, { index: 1, label: 'tests', probability: 0.3 }],
+	picks: [{ index: 0, label: 'lint', probability: 0.9 }],
+	probabilities: [{ index: 0, label: 'lint', probability: 0.9 }, { index: 1, label: 'tests', probability: 0.3 }],
 }]
 assert.deepEqual(buildAnswers(multiQuestions, multiAdvice), [{ id: 'checks', selected: ['lint'] }], 'only options at or above 0.5 are adopted')
 

@@ -96,24 +96,26 @@ git 安装跟踪的是你当时给的那个 ref，所以更新 = 重跑一次 `a
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| API Key | *空* | TypeSafe 密钥，来自 <https://console.typesafe.ai/keys>。在 `Config` 里声明为 `role('secret')`：以脱敏秘密的形式写进 profile 的 Cordis patch，且永远不会回传给浏览器。 |
+| API Key | *空* | TypeSafe 密钥，来自 <https://console.typesafe.ai/keys>。`role('secret')` 会从设置读取结果中移除它，不会回传给浏览器；但 profile 的 Cordis patch 仍以明文保存，不是加密存储。 |
 | 接口地址 | `https://api.typesafe.ai/v1/systemone` | 评测端点。 |
 | 模型 | `jev-latest` | Jev 模型或别名（`jev-1.13.0`、`jev-preview` 等）。 |
 | 启用 Jev 建议 | 开 | 总开关。 |
 | 把最近的对话作为 state 一起发送 | 开 | 是否把会话记录尾部挂到 `state.context`。 |
+| 发送前预览并确认 | 关 | 可选的本地预览模式；默认保留自动建议。 |
+| 发送前遮盖常见凭证 | 开 | 对发送的题目、选项和上下文做常见凭证模式替换，不是完整隐私过滤器。 |
 | 上下文消息条数 | `12` | 取最近多少条消息。 |
-| 超时（毫秒） | `30000` | 单次请求超时。 |
+| 超时（毫秒） | `30000` | 整次评估总超时，包含读取响应及重试退避。 |
 
 **测试连接**会发一个极简的 `noul` 问题并回报作答的模型，方便你在真正遇到问题之前验证刚粘贴的 Key。
 
-同样的字段也可以由 cordis 行的 `config` 预置（见 `cordis.patch.yml`）；用户设置层永远解析在它之上，
-所以组合配置只适合放「部署必须钉死」的值——例如无头 profile 里的接口地址。
+同样的字段也可以由 cordis 行的 `config` 预置（见 `cordis.patch.yml`）；用户设置层解析在它之上。
+组合配置提供的是部署默认值，不是不可覆盖的强制策略。
 
 ## 工作原理
 
 | 半边 | 文件 | 职责 |
 | --- | --- | --- |
-| Host | `lib/index.js` | `Config`（兼作设置 schema）、读取会话记录、对外发起 TypeSafe 调用、三条仅限回环的 JSON 路由。 |
+| Host | `lib/index.js` | `Config`（兼作设置 schema）、读取会话记录、对外发起 TypeSafe 调用、四条仅限回环的 JSON 路由。 |
 | Browser | `lib/client.js` | 浮动建议卡片与「设置 → Jev」面板。 |
 
 两半之间用同源 `fetch` 走宿主自己的 webserver：
@@ -122,47 +124,154 @@ git 安装跟踪的是你当时给的那个 ref，所以更新 = 重跑一次 `a
 | --- | --- |
 | `POST /dsh-jev-advisor/api/status` | `{ enabled, hasKey, endpoint, model, … }`——不含密钥的连接事实。 |
 | `POST /dsh-jev-advisor/api/test` | 一次极简评测，供「测试连接」按钮使用。 |
+| `POST /dsh-jev-advisor/api/prepare` | 本地准备精确请求快照及短期确认令牌，不调用 Jev。 |
 | `POST /dsh-jev-advisor/api/advise` | 为待答问题批次组装结构化请求、调用 Jev、把答案映射回选项标签。 |
 
-三条路由都会拒绝任何非「同源 + 回环地址」的请求；当 Connection 服务挂载时，还会先经过
-`ctx.connection.requestRejection`。
+四条路由均要求真实 TCP 对端和目标主机均为回环地址，不能仅靠伪造 `Host` 通过检查；当 Connection
+服务挂载时，还会经过 `ctx.connection.requestRejection`。
+浏览器提供的 `Origin` 必须与实际请求的协议、主机名和端口全部一致；Fetch Metadata 中的跨站及
+「同站但不同源」请求会被拒绝。无 `Origin` 的本地诊断客户端仍受支持。所有 POST 都要求
+`Content-Type: application/json`，仅 `/status` 额外允许 GET；GET 不会触发付费评估。
 
 ### 为什么用浮动卡片，而不是改造问题卡片？
 
 `conversation.composer` 是 **chain** 槽位：它只选举一个 entry，而内置的问题卡片对任何待答问题都会
 抢先当选。要接管它就得把整套问题 UI 重新实现一遍，并且会弄坏本插件没有建模的所有问题形态。
 `shell.overlay` 是官方文档指定的、用于「覆盖整个框架的浮层」的加法式座位，所以建议卡片渲染在内置
-问题卡片**旁边**，并从同一个 `useSessionPendingInteraction` 读取待答交互。
+问题卡片**旁边**，通过 `useSessionStatus` 读取待答交互。该槽位属于根作用域，因此还会单独订阅
+公开的 `uiSession.adapter.current`，跟随主视图会话。
 
 ## 几个值得知道的设计决定
 
 **多选题**会扇出成「每个选项一个 `noul` 问题」（「这个选项该被选中吗？」），因为 Jev 没有多标签
 原语。概率 ≥ `0.5` 的选项构成推荐选择。
 
-**单选题永远会多给 Jev 一个「以上都不是」选项。** 如果它选了这个，卡片会明说，并且不给采纳按钮——
+**单选题永远会多给 Jev 一个「以上都不是」选项。** 如果它选了这个，卡片会明说，并且禁用采纳按钮——
 你得自己写答案，因为 Jev 告诉你的是「选项列表不对」，而不是「哪个选项对」。
 
 **采纳是全有或全无。** 提交一个答案批次等于回答批次里的**每一道**问题。只要其中一道 Jev 没有给出
 明确答案——或者某道问题本身没有选项——按钮就保持禁用并在卡片上说明原因，而不是悄悄给其余问题提交
 空答案。
 
+### 正确性保护（0.1.5）
+
+- 评估键按题目生成（`decision_0`、`decision_1_opt_0` 等），与原始问题 ID 分离，多道多选题
+  不会互相覆盖；提交答案仍使用原始问题 ID 和选项标签。
+- 缺失答案、答案类型错误、未知选项、概率分布不完整，或概率及显式提供的置信度超出 `[0, 1]`，
+  都会阻止采纳。缺失的多选答案不会被当作反对票；所有选项均低于 `0.5` 时，不会强行推荐一个选项。
+- 单选概率总和允许与 1 相差不超过 `0.01`（舍入容差），概率为零的推荐不能采纳。
+  嵌套建议结构会在进入渲染前校验。
+- 建议绑定会话、交互 key 和完整问题内容。交互变更后立即隐藏旧建议，忽略迟到响应，并拒绝过期
+  提交事件；双击不会重复提交同一交互，失败后可以重试。
+- 每次浏览器评估携带新的请求 ID，宿主将它与会话、交互 key、问题内容一起回显；浏览器拒绝
+  身份不匹配或重放的响应内容。
+- 重复问题 ID 和有歧义的选项标签会被拒绝。错误请求正文返回 `400`，正文超限返回 `413`，
+  不支持的正文类型返回 `415`，不允许的 HTTP 方法返回 `405`。
+
+### 宿主接线与设置保存（0.1.5）
+
+- 主视图会话的待答交互优先，不再取集合中的第一项；仅当主会话没有待答交互时，才回退到第一个
+  带选项的问题。当前会话正在等待批准时，保留原有批准界面，不叠加后台会话的建议。
+- 保存前先验证整个草稿，再携带已读取的修订号调用一次 `ConfigFormController.mutate`。
+  宿主拒绝写入时保留草稿并显示错误，不会误报「已保存」。加载中、不可用及只读表单不能保存或
+  清除密钥；保存期间新输入的值也不会被旧提交清空。留空 Key 输入框不等于清除已存 Key。
+- 请求身份不匹配时仅记录比较标志，不再保存问题正文或全局会话诊断轨迹；请求 ID、会话和交互
+  key 仍保持严格校验。
+
+### 体验、隐私与成本控制（0.1.5）
+
+- 默认保留自动建议。开启「发送前预览并确认」后，可先查看精确的发送 JSON，再点「确认发送」。
+  准备阶段仅在本地宿主执行；确认使用该快照，不会重新读取更新后的会话。预览有效两分钟，修改设置
+  或请求身份后失效，内存中最多保留 32 份预览。
+- 默认遮盖常见凭证，作用于发送的题目、选项及上下文。规则识别常见 password/token 赋值、Bearer
+  token、`sk-…` 密钥、私钥块及 URL 凭证。**不能识别所有秘密或个人信息。** 敏感会话请关闭上下文
+  发送或启用确认模式。采纳时提交给 DSH 的原始选项标签不会被替换。
+- 完整评估 JSON 使用本地 **64 KiB UTF-8 字节预算**，优先缩减上下文；题目或选项自身超限时返回
+  `413`，不会调用 Jev，也不静默截断。这不是 token 估算，也不保证满足上游所有限制。
+- 同一宿主实例内的相同并发评估共用一次上游调用，仍分别回显各自请求 ID。宿主不缓存已完成结果，
+  显式重试仍可取得新结果。关闭或切换活动请求会取消该订阅；最后一个等待者离开后中止上游。
+  取消不能撤销上游已处理的工作，也不保证免单或退款。
+- 卡片展示 Jev 实际返回的 token 用量，不猜测货币价格。默认靠左，可切换左右以避让侧栏，支持
+  折叠、关闭后重开。重开已完成卡片不会再次评估；重开已取消的加载会重新请求。
+
+### 决策辅助功能（0.1.5）
+
+- **推荐分歧提示**：单选推荐与最强其他选项（包含「以上都不是」）的概率差不超过 10 个百分点时，
+  提示概率接近；多选题接近 `0.5` 阈值的选项提示为临界选择。这只是 Jev 已报告分数的观察，
+  不承诺真实正确率，也不会自动提交或额外禁止采纳。
+  如果其他选项概率高于推荐项，会单独提醒，不把它呈现为明确胜出。
+- **复制建议而不采纳**：将完整、有效的建议批次复制为可读文本，保留原始题目和选项措辞。
+  复制不提交答案，也不触发评估；缺失、异常或「以上都不是」的批次不能冒充完整答案复制。
+- **位置记忆**：左右停靠和折叠状态保存在浏览器本地存储中，不保存 Key、会话正文、请求响应或
+  临时偏好。同源浏览器内有效；宿主端口变化或更换浏览器 profile 时不共享。
+  本地存储被禁止或损坏时安全回退，不影响当前页面的布局操作。
+- **临时决策偏好**：输入「优先稳定」「尽快完成」「尽量少改代码」等要求，再点「应用并重新评估」。
+  仅输入不会产生调用；上限为 500 个 UTF-16 编码单位（部分 emoji 占两个单位），只用于当前交互，
+  切换问题即清空。应用或清除已生效偏好会触发新评估，确认模式下则重新准备本地预览。
+  不修改 agent 提示词，也不写入 DSH 设置；关闭会话上下文时，仍会发送用户显式填写的偏好。
+  偏好同样经过凭证遮盖和完整请求预算检查，修改后旧预览及建议身份失效。
+
+此前暂存的正确性、宿主接线及隐私改进统一并入从 0.1.4 升级的 **0.1.5**；中间开发版本标记不作为发布版本。
+
 ## 开发
 
+设置页的保存、清除 Key 与连接测试使用同步互斥锁。清除 Key 也通过带修订号的原子写入，
+不会覆盖外部更新，等待期间新输入的 Key 草稿会保留。卸载时中止状态读取与连接测试，
+忽略迟到的界面更新和后续请求；已交给宿主的配置写入无法撤回。
+仅有空白 Key 的草稿不会显示“已保存”，而会明确提示使用“清除 Key”。
+
 ```bash
+npm ci                           # 安装开发测试依赖，无需真实 API Key
 node scripts/build.mjs           # src/*.js -> lib/*.js（含类型声明）
 node scripts/build.mjs --check   # lib/ 与 src/ 不一致就失败
-npm test                         # 上面那条检查 + 请求组装 + 客户端接线两套断言
+npm test                         # 构建新鲜度、请求映射、路由、生命周期、设置契约
+npm run check:pack               # DSH 发布包入口与文件检查
 npm pack --dry-run               # 确认发布文件清单
+npx playwright install chromium
+npm run test:browser              # 真实 Chromium + React DOM，隔离服务夹具
+npm run test:host                 # 真实 DSH CLI，隔离临时 home（见下文）
+npm run test:install              # 真实 .tgz 离线安装 + 隔离宿主加载
+npm run quality                   # 构建 → 基础 → 浏览器 → 打包 → 宿主 → 安装
 ```
 
-`test/e2e.mjs` 会驱动一个真实运行的宿主去访问 `test/mock-typesafe.mjs`（替身 TypeSafe 端点），
-这样无需真实 Key 就能验证对外调用这一环：
+`npm test` 还覆盖异常响应映射、路由拒绝路径、确定性的 hook/effect 生命周期测试，以及真实回环
+HTTP 桥到替身评估端点的往返。这些测试不需要真实 API Key，也不会在仓库中产生请求转储文件；
 
-```bash
-node test/mock-typesafe.mjs 43221 &            # 替身评测端点
-dsh --profile <临时 profile> --port 43219 --no-open   # 装好本插件的宿主
-node test/e2e.mjs <启动 token>                 # status + test + advise 全链路
+`test:browser` 使用仅用于开发测试的 Playwright 1.59.1、真实 Chromium 和 React DOM，宿主服务由
+隔离夹具提供。覆盖主会话切换、迟到响应、关闭／重试、采纳，以及原子／异步设置保存、
+拒绝写入、清除 Key 和设置页卸载取消。
+这不是完整 DSH Desktop 界面的自动化测试。
+
+`test:host` 启动真实 DSH CLI，使用随机临时 `DSH_HOME`、临时 profile、随机回环端口及内存记录的
+TypeSafe 替身。验证实际挂载的路由、请求绑定、正确／错误／缺失 Key 及 HTTP 拒绝路径，完成后关闭
+测试进程并清理临时 profile；不会使用真实 Jev Key 或用户 profile。通过 `DSH_TEST_CLI` 指定固定
+版本的 CLI 入口（也可安装到模块解析可找到的位置），不会回退到 PATH 中的任意 `dsh`。PowerShell 示例：
+
+```powershell
+$env:DSH_TEST_CLI = "<临时 CLI 目录>/node_modules/@deepseek-ai/dsh/lib/bin.js"
+npm run test:host
+npm run quality
 ```
+
+`test:install` 在临时目录生成真实 npm `.tgz`，再在全新临时 profile 中执行
+`npm install --offline --ignore-scripts`。Peer 依赖须已在 npm 缓存中，缺失时直接失败，
+不联网补装，也不回退到源码链接。测试通过 profile 的 bundle 栈加载压缩包内的
+`cordis.patch.yml`，验证实际建议请求、DSH 客户端启动图及宿主提供的客户端模块；
+同时断言插件目录是实际安装文件而非 junction。结束后清理所属进程、压缩包和临时 profile，
+不使用真实 Key 或用户 profile。
+
+`quality` 任一步失败立即停止，缺少 Chromium 或真实 CLI 时失败而非跳过验证。
+它忽略开发专用的 `DSH_CLIENT_SOURCE` 开关，始终验证 `lib/`，不发布、不提交。
+`npm ci`、安装 Chromium 及准备固定版本 CLI 是运行前的环境准备，不会由闸门自动修改用户 profile。
+
+CI 在 runner 的临时目录安装 `@deepseek-ai/dsh@0.2.0-rc.2`；本机完整宿主验证也是该版本、Node 24。
+`.github/workflows/ci.yml` 配置 Node 20／22／24 的基础测试和发布包检查，并单独运行 Node 24 的
+统一质量闸门（含浏览器、隔离宿主和真实压缩包安装）。GitHub CI 仍需在提交后实际运行。
+
+手动验证**已运行且配置为本地替身端点的临时宿主**时，可通过 `DSH_E2E_BASE` 或
+`node test/e2e.mjs <带 token 的启动 URL>` 指定目标。`node test/mock-typesafe.mjs 0` 会分配空闲端口，
+默认仅在内存记录请求。可选 `DSH_E2E_DUMP` 读取明确指定的转储文件，`DSH_E2E_BADKEY_BASE` 指向另一个
+配置错误 Key 的临时宿主；未提供后者时会明确跳过错误 Key 检查，不再误报通过。自动宿主测试始终验证该路径。
 
 插件是纯 JavaScript：宿主半边是 Node ESM，浏览器半边已经写成 DSH 客户端模块系统要求的
 `__ModuleLoader__.load({ id, factory })` 惰性 CJS 形式。没有需要转译的东西，所以 `lib/` 就是
@@ -171,7 +280,7 @@ node test/e2e.mjs <启动 token>                 # status + test + advise 全链
 浏览器半边只能 `require` 平台种子模块（`react`、`react/jsx-runtime`、`react-dom`、
 `@deepseek-ai/cordis`、`@deepseek-ai/dsh-client-store`、`@deepseek-ai/dsh-client-ui-slots`、
 `@deepseek-ai/dsh-client-ui-primitives`、`@deepseek-ai/dsh-client-ui-dockkit`）。跨插件协作一律走
-cordis 服务（`ctx.slots`、`ctx.locale`、`ctx.settingsScope`）或宿主 HTTP 桥，绝不 import 别的插件内部。
+cordis 服务（`ctx.slots`、`ctx.locale`、`ctx.configForms`、`ctx.uiSession`）或宿主 HTTP 桥，绝不 import 别的插件内部。
 
 ## 排障
 
@@ -180,23 +289,28 @@ cordis 服务（`ctx.slots`、`ctx.locale`、`ctx.settingsScope`）或宿主 HTT
 | 卡片从不出现 | 没有待答问题、Jev 建议被关闭，或宿主路由不可达。先确认 `/dsh-jev-advisor/api/status` 返回 `{"ok":true,...}`。 |
 | `no Jev API key is configured` | 去「设置 → Jev」保存 Key。 |
 | `Jev responded 401` | Key 无效或已吊销。 |
-| `Jev responded 422` | 请求格式不对——请带上卡片里显示的 JSON 反馈。 |
+| `Jev responded 422` | 先在本地检查请求 JSON。反馈时优先提供错误码和请求字节数，不要分享密钥或会话正文。 |
 | `Jev responded 429 / 529` | 触发限流或服务过载；插件会退避重试两次后放弃。 |
+| `host bridge is out of date` | 浏览器加载了新客户端，但宿主仍在运行旧代码。先重启 DSH 宿主进程，再刷新浏览器；仅重试或刷新页面不会重新加载宿主代码。 |
+| `returned advice for a different request` | 回显的请求身份或问题内容不一致。对象字段顺序不影响判断，但题目及选项顺序必须一致。重启宿主并刷新后仍失败时，仅提供 `reqIdMatch`、`sessionMatch`、`keyMatch`、`questionsMatch` 四个诊断标志，不要提供密钥或会话正文。 |
 | 设置里没有 Jev 分区 | 客户端 bundle 没加载。确认 `node_modules/dsh-jev-advisor/package.json` 里有 `dsh.client`，且 `lib/client.js` 已随包发布。 |
 | 启动报 `duplicate loader entry id` | 包被挂了两次——装了两份，或某个聚合包又挂了一次。删掉一份。 |
 
 ## 已知限制
 
-- **需要设置服务会把 `Config` 投影成表单的 DSH（0.1.7-rc.1 或更新）。** 本插件最初是照 `settings.register` /
-  设置命名空间那套 API 写的，DSH 已经把它连同客户端的 `settingsScope` 一起删掉。在 0.1.5-rc.2 及更早版本上，
-  宿主半边会调用一个已不存在的方法，浏览器半边也永远解析不到 `configForms`，插件根本不会加载。
-  没有做双 API 兼容——DSH 是迭代很快的开发者预览版。
-- 卡片浮在右上角，右栏很宽时可能重叠；点 `✕` 关闭。
-- 同时有多个会话挂着待答问题时，卡片跟随当前会话，否则回退到第一个待答交互。
+- **需要 Config 表单、`ConfigFormController.mutate` 和 `uiSession.adapter.current`
+  （0.1.7-rc.1 或更新）。** 已核对公开发布的 0.1.7-rc.1 客户端产物及本机 0.2.0-rc.2 的接口实现。
+  不提供旧 `settingsScope` 回退；完整宿主集成测试固定运行时版本，不会悄悄使用 PATH 中的任意 `dsh`。
+- 侧栏避让通过手动左右停靠实现，不探测宿主私有 DOM；很宽的宿主面板仍可能重叠，可切换位置或折叠／关闭。
+  窄屏溢出已纳入 Chromium 回归，但尚未自动化完整 DSH Desktop 的视觉验收。
+- 同时有多个会话挂着待答问题时，卡片优先跟随主会话；仅当主会话没有待答交互时，才回退到第一个带选项的待答交互。
 - 计划评审（plan-review）问题会和其它带选项的问题一样获得建议；卡片不会取代批准/拒绝按钮。
 - API Key 会传到宿主进程（HTTPS 调用在宿主发起）。它不会回传浏览器，但会以明文保存在 profile 的
   Cordis patch 里——请像对待任何凭证一样保护该文件。
-- Jev 按输入 token 计费。每次请求的会话记录上限约 24k 字符。
+- 回环限制不隔离以同一系统用户身份运行的恶意本地进程，请使用可信的 DSH profile。
+  请求绑定用于防止旧响应误用，不是按会话划分的授权机制。
+- 每次请求的会话记录上限约 24k 字符，完整请求的字节预算还可能进一步缩减它。用量按评估计，
+  不要把共享结果重复累计成多次收费。
 - 除文档化的两个过载码（`429`、`529`）外不做重试。
 
 ## 前作，以及为什么这个包不叫 `dsh-jev`

@@ -18,6 +18,8 @@ export declare const Config: Schema<{
   model: string
   enabled: boolean
   includeTranscript: boolean
+  requireConfirmation: boolean
+  redactSensitive: boolean
   transcriptMessages: number
   timeoutMs: number
 }>
@@ -44,6 +46,29 @@ export declare function buildJevRequest(
 
 /** Map a Jev response back onto the pending questions. */
 export declare function mapAdvice(plan: unknown[], jevResponse: unknown): unknown[]
+
+/** 准备经过凭证脱敏及完整 UTF-8 字节预算限制的请求。 */
+export declare function prepareJevRequest(options: {
+  questions: JevQuestion[]
+  transcript?: string
+  model?: string
+  redactSensitive?: boolean
+  maxBytes?: number
+  decisionPreference?: string
+}): {
+  body: { state: unknown; model: string; questions: Record<string, unknown> }
+  plan: unknown[]
+  privacy: { includedTranscript: boolean; contextChars: number; redactions: number; truncated: boolean; requestBytes: number }
+}
+
+/** 带总超时及取消信号的评估传输。 */
+export declare function callJev(options: { endpoint: string; apiKey: string; timeoutMs: number; body: unknown; signal?: AbortSignal }): Promise<Record<string, unknown>>
+
+/** 同一宿主实例内的并发请求共享器。 */
+export declare function createEvaluationPool(options?: { ttlMs?: number; maxEntries?: number }): {
+  run<T>(key: string, factory: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<{ value: T; reused: boolean }>
+  dispose(): void
+}
 
 /** Mount the plugin. */
 export declare function apply(ctx: Context, config?: Partial<Schema.Type<typeof Config>>): void

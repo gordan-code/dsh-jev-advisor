@@ -26,17 +26,17 @@ const questions = [
 
 const built = buildJevRequest(questions, '[user] Ship the plugin today.')
 
-assert.deepEqual(Object.keys(built.questions), ['mode'], 'one choice question per single-choice decision')
-assert.equal(built.questions.mode.type, 'choice')
-assert.deepEqual(Object.keys(built.questions.mode.criteria), ['opt_0', 'opt_1', '__none_of_the_above__'])
-assert.match(built.questions.mode.criteria.opt_0, /^Fast —/, 'the recommendation suffix is stripped from the rubric')
+assert.deepEqual(Object.keys(built.questions), ['decision_0'], 'one collision-free choice key per single-choice decision')
+assert.equal(built.questions.decision_0.type, 'choice')
+assert.deepEqual(Object.keys(built.questions.decision_0.criteria), ['opt_0', 'opt_1', '__none_of_the_above__'])
+assert.match(built.questions.decision_0.criteria.opt_0, /^Fast —/, 'the recommendation suffix is stripped from the rubric')
 assert.equal(built.state.decisions[0].options[0].label, 'Fast (Recommended)', 'the answer value keeps the original label')
-assert.match(built.questions.mode.instructions, /decisions\[0\]\.options/)
+assert.match(built.questions.decision_0.instructions, /decisions\[0\]\.options/)
 
 const choiceAdvice = mapAdvice(built.plan, {
   model: 'jev-1.13.0',
   answers: {
-    mode: { type: 'choice', choice: 'opt_0', probabilities: { opt_0: 0.88, opt_1: 0.12, __none_of_the_above__: 0 }, confidence: 0.81 },
+    decision_0: { type: 'choice', choice: 'opt_0', probabilities: { opt_0: 0.88, opt_1: 0.12, __none_of_the_above__: 0 }, confidence: 0.81 },
   },
   usage: { input_tokens: 1, output_tokens: 1 },
 })
@@ -49,7 +49,7 @@ assert.equal(choiceAdvice[0].noneOfTheAbove, false)
 assert.equal(choiceAdvice[0].probabilities.length, 2, 'the synthetic option is not part of the distribution')
 
 const noneAdvice = mapAdvice(built.plan, {
-  answers: { mode: { type: 'choice', choice: '__none_of_the_above__', probabilities: { opt_0: 0.2, opt_1: 0.2, __none_of_the_above__: 0.6 }, confidence: 0.4 } },
+  answers: { decision_0: { type: 'choice', choice: '__none_of_the_above__', probabilities: { opt_0: 0.2, opt_1: 0.2, __none_of_the_above__: 0.6 }, confidence: 0.4 } },
 })
 assert.equal(noneAdvice[0].noneOfTheAbove, true)
 assert.equal(noneAdvice[0].pick, undefined, 'a "none of the above" answer has no adoptable option')
@@ -63,15 +63,15 @@ const multiQuestions = [
   },
 ]
 const multiBuilt = buildJevRequest(multiQuestions, '')
-assert.deepEqual(Object.keys(multiBuilt.questions), ['opt_0', 'opt_1', 'opt_2'], 'multi-select fans out into one noul per option')
-assert.equal(multiBuilt.questions.opt_1.type, 'noul')
-assert.match(multiBuilt.questions.opt_1.instructions, /decisions\[0\]\.options\[1\]/)
+assert.deepEqual(Object.keys(multiBuilt.questions), ['decision_0_opt_0', 'decision_0_opt_1', 'decision_0_opt_2'], 'multi-select fans out into namespaced noul keys')
+assert.equal(multiBuilt.questions.decision_0_opt_1.type, 'noul')
+assert.match(multiBuilt.questions.decision_0_opt_1.instructions, /decisions\[0\]\.options\[1\]/)
 
 const multiAdvice = mapAdvice(multiBuilt.plan, {
   answers: {
-    opt_0: { type: 'noul', noul: 0.91 },
-    opt_1: { type: 'noul', noul: 0.78 },
-    opt_2: { type: 'noul', noul: 0.31 },
+    decision_0_opt_0: { type: 'noul', noul: 0.91 },
+    decision_0_opt_1: { type: 'noul', noul: 0.78 },
+    decision_0_opt_2: { type: 'noul', noul: 0.31 },
   },
 })
 assert.deepEqual(multiAdvice[0].picks.map((pick) => pick.label), ['lint', 'typecheck'], 'only options above the threshold are picked')

@@ -1,0 +1,110 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { buildJevRequest, mapAdvice } from '../lib/index.js'
+
+const multi = (id, labels = ['A', 'B']) => ({
+  id, question: id, multiSelect: true, options: labels.map((label) => ({ label })),
+})
+const choice = (id = 'mode') => ({ ...multi(id), multiSelect: false })
+
+function choiceResponse(built, overrides = {}) {
+  const entry = built.plan[0]
+  return { answers: { [entry.answerKey ?? entry.id]: {
+    type: 'choice', choice: entry.keys[0],
+    probabilities: Object.fromEntries([...entry.keys, entry.noneKey].map((key, index) => [key, index === 0 ? 1 : 0])),
+    confidence: 0.8, ...overrides,
+  } } }
+}
+
+test('two multi-select decisions have independent evaluation keys and answers', () => {
+  const built = buildJevRequest([multi('first'), multi('second', ['C', 'D'])], '')
+  assert.equal(Object.keys(built.questions).length, 4)
+  assert.equal(new Set(built.plan.flatMap((entry) => entry.keys)).size, 4)
+  const values = [0.9, 0.1, 0.1, 0.9]
+  const answers = Object.fromEntries(built.plan.flatMap((entry) => entry.keys).map((key, index) => [key, { type: 'noul', noul: values[index] }]))
+  assert.deepEqual(mapAdvice(built.plan, { answers }).map((entry) => entry.picks.map((pick) => pick.label)), [['A'], ['D']])
+})
+
+test('arbitrary input IDs cannot collide with generated evaluator keys', () => {
+  const built = buildJevRequest([choice('opt_0'), multi('second'), choice('__proto__'), choice('decision_1_opt_0')], '')
+  assert.equal(Object.keys(built.questions).length, 5)
+  assert.equal(JSON.parse(JSON.stringify(built.questions)).hasOwnProperty('__proto__'), false)
+  for (const entry of built.plan.filter((item) => item.kind === 'choice')) {
+    assert.equal(built.questions[entry.answerKey].type, 'choice')
+  }
+})
+
+test('duplicate or empty decision IDs are rejected before mapping', () => {
+  assert.throws(() => buildJevRequest([choice('same'), multi('same')], ''), /id/i)
+  assert.throws(() => buildJevRequest([choice('')], ''), /id/i)
+})
+
+test('duplicate or malformed option labels are rejected before building requests', () => {
+  assert.throws(() => buildJevRequest([multi('checks', ['same', 'same'])], ''), /option/i)
+  assert.throws(() => buildJevRequest([{ ...multi('checks'), options: [{ label: '' }] }], ''), /option/i)
+})
+
+test('missing multi-select answers block adoption instead of becoming zero', () => {
+  const built = buildJevRequest([multi('checks')], '')
+  const advice = mapAdvice(built.plan, { answers: { [built.plan[0].keys[0]]: { type: 'noul', noul: 0.9 } } })[0]
+  assert.equal(advice.answered, false)
+  assert.deepEqual(advice.picks, [])
+})
+
+for (const probability of [-0.1, 1.1, NaN, Infinity, '0.9', null]) {
+  test(`invalid multi-select probability ${String(probability)} blocks the whole decision`, () => {
+    const built = buildJevRequest([multi('checks')], '')
+    const answers = Object.fromEntries(built.plan[0].keys.map((key, index) => [key, { type: 'noul', noul: index === 0 ? 0.9 : probability }]))
+    const advice = mapAdvice(built.plan, { answers })[0]
+    assert.equal(advice.answered, false)
+    assert.deepEqual(advice.picks, [])
+  })
+}
+
+test('all-low multi-select probabilities do not invent a recommended pick', () => {
+  const built = buildJevRequest([multi('checks')], '')
+  const answers = Object.fromEntries(built.plan[0].keys.map((key) => [key, { type: 'noul', noul: 0.2 }]))
+  assert.deepEqual(mapAdvice(built.plan, { answers })[0].picks, [])
+})
+
+test('unknown choice IDs and incomplete distributions are not answered', () => {
+  const built = buildJevRequest([choice()], '')
+  assert.equal(mapAdvice(built.plan, choiceResponse(built, { choice: 'not-an-option' }))[0].answered, false)
+  assert.equal(mapAdvice(built.plan, choiceResponse(built, { probabilities: { [built.plan[0].keys[0]]: 1 } }))[0].answered, false)
+})
+
+for (const field of ['probability', 'confidence']) {
+  for (const value of [-0.1, 1.1, NaN, Infinity, '0.8', null]) {
+    test(`invalid choice ${field} ${String(value)} is not adoptable`, () => {
+      const built = buildJevRequest([choice()], '')
+      const response = choiceResponse(built)
+      const answer = Object.values(response.answers)[0]
+      if (field === 'probability') answer.probabilities[built.plan[0].keys[0]] = value
+      else answer.confidence = value
+      assert.equal(mapAdvice(built.plan, response)[0].answered, false)
+    })
+  }
+}
+
+test('invalid response envelopes fail closed without throwing', () => {
+  const built = buildJevRequest([choice(), multi('checks')], '')
+  for (const response of [undefined, null, [], {}, { answers: [] }]) {
+    assert.ok(mapAdvice(built.plan, response).every((entry) => entry.answered === false))
+  }
+})
+
+test('valid choice probabilities at the boundary and absent confidence remain supported', () => {
+  const built = buildJevRequest([choice()], '')
+  const response = choiceResponse(built)
+  delete Object.values(response.answers)[0].confidence
+  assert.equal(mapAdvice(built.plan, response)[0].answered, true)
+})
+
+for (const values of [[0, 0, 0], [0.8, 0.8, 0.8], [0.1, 0.1, 0.1], [0, 1, 0]]) {
+  test(`invalid choice mass or zero-probability selection ${values.join('/')} is blocked`, () => {
+    const built = buildJevRequest([choice()], '')
+    const response = choiceResponse(built)
+    Object.values(response.answers)[0].probabilities = Object.fromEntries([...built.plan[0].keys, built.plan[0].noneKey].map((key, index) => [key, values[index]]))
+    assert.equal(mapAdvice(built.plan, response)[0].answered, false)
+  })
+}

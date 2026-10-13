@@ -1,0 +1,378 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>dsh-jev-advisor browser fixture</title>
+<style>
+  :root { color-scheme: light; font-family: system-ui, sans-serif; }
+  html, body { overflow-x: hidden; }
+  body { margin: 0; min-height: 100vh; background: #fff; color: #111; }
+  #overlay-root { position: relative; min-height: 420px; overflow-x: hidden; }
+  #settings-root { padding: 24px; }
+</style>
+<div id="overlay-root"></div>
+<div id="settings-root"></div>
+<script src="/vendor/react.development.js"></script>
+<script src="/vendor/react-dom.development.js"></script>
+<script>
+  // The real bundle is loaded below. This is a fixture-side ModuleLoader, not
+  // a copy of the plugin: it supplies only the platform's `require('react')`.
+  window.__ModuleLoader__ = { load(value) { window.__jevRegistration = value } }
+</script>
+<script src="/lib/client.js"></script>
+<script>
+(() => {
+  'use strict'
+
+  const React = window.React
+  const ReactDOM = window.ReactDOM
+  const registration = window.__jevRegistration
+  if (!React || !ReactDOM || !registration || registration.id !== 'dsh-jev-advisor') {
+    throw new Error('browser fixture could not load the real React client bundle')
+  }
+
+  const deepCopy = (value) => {
+    if (value === undefined) return undefined
+    return JSON.parse(JSON.stringify(value))
+  }
+
+  function store(initial) {
+    let snapshot = initial
+    const listeners = new Set()
+    return {
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+      getSnapshot() { return snapshot },
+      set(next) {
+        snapshot = next
+        for (const listener of [...listeners]) listener()
+      },
+    }
+  }
+
+  const statusStore = store(new Map())
+  // This object is deliberately stable for the lifetime of the page. The
+  // product receives it as ctx.uiSession.adapter.current and must subscribe to
+  // its snapshot rather than observe a newly-created wrapper on every render.
+  const mainSession = store({ key: undefined })
+
+  const defaultConfig = {
+    apiKey: 'sk-fixture',
+    endpoint: `${location.origin}/v1/systemone`,
+    model: 'jev-latest',
+    enabled: true,
+    includeTranscript: true,
+    requireConfirmation: false,
+    redactSensitive: true,
+    transcriptMessages: 12,
+    timeoutMs: 30000,
+  }
+  const config = {
+    value: { ...defaultConfig },
+    status: 'ready',
+    revision: 1,
+    writable: true,
+    failMutate: false,
+    failSet: false,
+    deferWrites: false,
+    pendingWrites: [],
+    calls: [],
+  }
+  const configListeners = new Set()
+  let configSnapshot = {
+    status: config.status,
+    value: { ...config.value },
+    revision: config.revision,
+    writable: config.writable,
+  }
+  const publishConfig = () => {
+    configSnapshot = {
+      status: config.status,
+      value: { ...config.value },
+      revision: config.revision,
+      writable: config.writable,
+    }
+    for (const listener of [...configListeners]) listener()
+  }
+  const configScope = {
+    subscribe(listener) {
+      configListeners.add(listener)
+      return () => configListeners.delete(listener)
+    },
+    getSnapshot() {
+      return configSnapshot
+    },
+    mutate(ops, expectedRevision) {
+      config.calls.push({ method: 'mutate', ops: deepCopy(ops), expectedRevision })
+      const commit = () => {
+        if (config.failMutate || config.status !== 'ready' || config.writable === false || expectedRevision !== config.revision) return false
+        if (!Array.isArray(ops)) return false
+        const next = { ...config.value }
+        for (const op of ops) {
+          if (!op || op.op !== 'set' || !Array.isArray(op.path) || op.path.length !== 1) return false
+          next[op.path[0]] = op.value
+        }
+        config.value = next
+        config.revision += 1
+        publishConfig()
+        return true
+      }
+      if (config.deferWrites) return new Promise((resolve) => config.pendingWrites.push({ commit, resolve }))
+      return commit()
+    },
+    set(field, value) {
+      config.calls.push({ method: 'set', field, value })
+      if (config.failSet || config.status !== 'ready' || config.writable === false) return false
+      config.value = { ...config.value, [field]: value }
+      config.revision += 1
+      publishConfig()
+      return true
+    },
+  }
+
+  const calls = []
+  const answerPlans = new Map()
+  const interactions = new Map()
+
+  function makeInteraction(spec) {
+    const sessionId = String(spec.sessionId)
+    const key = String(spec.interactionKey ?? `${sessionId}:question`)
+    if (spec.kind === 'approval') {
+      return { sessionId, key, kind: 'approval', questions: [] }
+    }
+    const sourceQuestions = Array.isArray(spec.questions) && spec.questions.length > 0 ? spec.questions : [spec]
+    const normalizedQuestions = sourceQuestions.map((questionSpec, index) => {
+      const labels = Array.isArray(questionSpec.options) && questionSpec.options.length > 0 ? questionSpec.options : ['Fast', 'Careful']
+      return {
+        id: String(questionSpec.id ?? questionSpec.questionId ?? (index === 0 ? 'mode' : `mode-${String(index)}`)),
+        question: String(questionSpec.question ?? questionSpec.label ?? spec.question ?? sessionId),
+        header: typeof questionSpec.header === 'string' ? questionSpec.header : undefined,
+        detail: typeof questionSpec.detail === 'string' ? questionSpec.detail : undefined,
+        multiSelect: questionSpec.multiSelect === true,
+        options: labels.map((label) => typeof label === 'object' && label !== null
+          ? { label: String(label.label), description: typeof label.description === 'string' ? label.description : undefined }
+          : { label: String(label) }),
+      }
+    })
+    const interaction = {
+      sessionId,
+      key,
+      questions: normalizedQuestions,
+      answer(payload) {
+        calls.push({ sessionId, interactionKey: key, payload: deepCopy(payload) })
+        const plan = answerPlans.get(key) ?? []
+        const next = plan.length > 0 ? plan.shift() : 'resolve'
+        if (next === 'reject') return Promise.reject(new Error('fixture answer failed'))
+        return Promise.resolve()
+      },
+    }
+    interactions.set(key, interaction)
+    return interaction
+  }
+
+  const registrations = []
+  const ctx = {
+    effect(callback) { return callback() ?? (() => {}) },
+    locale: {
+      register() { return () => {} },
+      bind() {
+        return (key, params) => {
+          const values = {
+            'panel.title': 'Jev advice',
+            'panel.subtitle': 'What TypeSafe System One makes of this choice',
+            'panel.loading': 'Asking Jev…',
+            'panel.preparing': 'Preparing local preview…',
+            'panel.loadingAutoWithTranscript': 'Automatically requesting Jev with recent conversation',
+            'panel.loadingAutoWithoutTranscript': 'Automatically requesting Jev without recent conversation',
+            'panel.disabled': 'Jev advice is switched off in Settings → Jev.',
+            'panel.noKey': 'No Jev API key yet. Add one in Settings → Jev.',
+            'panel.retry': 'Retry',
+            'panel.dismiss': 'Dismiss',
+            'panel.recommend': 'Recommended',
+            'panel.confidence': 'Confidence',
+            'panel.otherOptions': 'Other options',
+            'panel.noneOfTheAbove': 'Jev thinks none of the listed options fits — answer this one yourself.',
+            'panel.adopt': 'Adopt Jev’s answer',
+            'panel.adopting': 'Submitting…',
+            'panel.partial': 'Jev has no clear advice for every question in this batch; please choose manually.',
+            'panel.unanswered': 'Jev returned an incomplete or invalid answer; retry or answer manually.',
+            'panel.json': 'Show the structured JSON request and response',
+            'panel.request': 'Request (sent to Jev)',
+            'panel.response': 'Response (from Jev)',
+            'panel.model': 'Model',
+            'panel.multiSelect': 'multi-select',
+            'panel.adoptFailed': 'Adopt failed: {message}',
+            'panel.question': 'Question {index}',
+             'panel.confirm': 'Confirm and send',
+             'panel.preview': 'Preview before sending (does not call Jev)',
+             'panel.context': 'Context sent: {summary}',
+             'panel.usage': 'Usage: input {input} · output {output}',
+             'panel.reused': 'Shared concurrent evaluation',
+             'panel.bytes': '{bytes} bytes',
+             'panel.open': 'Open Jev advice',
+             'panel.collapse': 'Collapse',
+             'panel.expand': 'Expand',
+             'panel.dockLeft': 'Dock left',
+             'panel.dockRight': 'Dock right',
+             'panel.dockHelp': 'This overlay uses public slot information only and never reads private host DOM; it docks left by default to avoid the right rail.',
+             'panel.transcriptIncluded': 'Transcript included',
+             'panel.transcriptOmitted': 'Transcript omitted',
+             'panel.chars': '{count} chars',
+             'panel.redactions': '{count} redactions',
+             'panel.truncated': 'truncated',
+             'panel.probabilityClose': 'The recommendation is close to another option; use your judgment.',
+             'panel.probabilityOtherHigher': 'Another option has a higher probability than the recommendation; use your judgment.',
+             'panel.multiProbabilityClose': 'These options are close to 50%; use your judgment: {options}',
+             'panel.copy': 'Copy suggestion',
+             'panel.copied': 'Copied',
+             'panel.copyFailed': 'Copy failed: {message}',
+             'panel.preferenceLabel': 'Temporary decision preference (this interaction only)',
+             'panel.preferencePlaceholder': 'Tell Jev what matters this time (up to 500 characters)',
+             'panel.preferenceApply': 'Apply and re-evaluate',
+             'panel.preferenceApplied': 'This will create a new evaluation.',
+             'panel.preferenceStable': 'Prefer stability',
+             'panel.preferenceFast': 'Finish quickly',
+             'panel.preferenceMinimal': 'Change as little code as possible',
+            'settings.nav': 'Jev',
+            'settings.title': 'Jev decision advice',
+            'settings.description': 'Fixture settings',
+            'settings.apiKey': 'API key',
+            'settings.apiKeySet': 'Stored',
+            'settings.apiKeyUnset': 'Not configured',
+            'settings.apiKeyPlaceholder': 'sk-...',
+            'settings.endpoint': 'Endpoint',
+            'settings.model': 'Model',
+            'settings.enabled': 'Enable Jev advice',
+            'settings.includeTranscript': 'Send the recent conversation as the state',
+             'settings.requireConfirmation': 'Require confirmation before sending',
+             'settings.redactSensitive': 'Mask common credentials before sending',
+             'settings.redactSensitiveHint': 'Not all sensitive information can be detected',
+            'settings.transcriptMessages': 'Context messages',
+            'settings.timeoutMs': 'Timeout (ms)',
+            'settings.save': 'Save',
+            'settings.saving': 'Saving…',
+            'settings.saved': 'Saved',
+            'settings.test': 'Test connection',
+            'settings.testing': 'Testing…',
+            'settings.testOk': 'Reachable, model {model}',
+            'settings.clearKey': 'Clear key',
+            'settings.unsaved': 'Unsaved changes',
+            'settings.unavailable': 'The settings service is unavailable; the composition config is in effect.',
+            'settings.rejected': 'The host rejected the write; settings may have changed in another window. Your edits are kept; try again.',
+            'settings.blankKey': 'A blank key does not remove stored credentials. Use Clear key to remove them.',
+            'settings.help': 'Fixture',
+          }
+          const template = values[key] ?? key
+          return params === undefined ? template : template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
+        }
+      },
+    },
+    slots: {
+      inject(_name, callback) { callback() },
+      register(options, component) {
+        const entry = { options, component }
+        registrations.push(entry)
+        return () => {}
+      },
+    },
+    configForms: { get() { return configScope } },
+    uiSession: { adapter: { current: mainSession } },
+  }
+
+  const exported = registration.factory((specifier) => {
+    if (specifier === 'react') return React
+    throw new Error(`fixture require denied: ${specifier}`)
+  })
+  exported.apply(ctx)
+  const overlayRegistration = registrations.find((entry) => entry.options.name === 'shell.overlay')
+  const settingsRegistration = registrations.find((entry) => entry.options.name === 'settings.section')
+  if (!overlayRegistration || !settingsRegistration) throw new Error('real product slots were not registered')
+
+  function useSessionStatus(selector) {
+    return React.useSyncExternalStore(
+      statusStore.subscribe,
+      () => selector(statusStore.getSnapshot()),
+      () => selector(statusStore.getSnapshot()),
+    )
+  }
+
+  const roots = { overlay: null, settings: null }
+  const commits = { overlay: 0, settings: 0 }
+  function ObservedComponent({ kind, component, props }) {
+    // Keep the commit counter tied to the same external stores as the real
+    // slot host. It lets tests await a React commit rather than sleep.
+    React.useSyncExternalStore(statusStore.subscribe, statusStore.getSnapshot, statusStore.getSnapshot)
+    React.useSyncExternalStore(configScope.subscribe, configScope.getSnapshot, configScope.getSnapshot)
+    React.useSyncExternalStore(mainSession.subscribe, mainSession.getSnapshot, mainSession.getSnapshot)
+    React.useLayoutEffect(() => { commits[kind] += 1 })
+    return React.createElement(component, props)
+  }
+  function render(kind) {
+    const registrationEntry = kind === 'overlay' ? overlayRegistration : settingsRegistration
+    const container = document.getElementById(`${kind}-root`)
+    if (!roots[kind]) roots[kind] = ReactDOM.createRoot(container)
+    const props = { t: ctx.locale.bind('dsh-jev-advisor'), ...registrationEntry.options.inject() }
+    if (kind === 'overlay') props.useSessionStatus = useSessionStatus
+    roots[kind].render(React.createElement(ObservedComponent, { kind, component: registrationEntry.component, props }))
+  }
+
+  function unmount(kind) {
+    if (roots[kind]) {
+      roots[kind].unmount()
+      roots[kind] = null
+    }
+    document.getElementById(`${kind}-root`).replaceChildren()
+  }
+
+  window.__fixture = {
+    ready: true,
+    commits,
+    config,
+    calls,
+    answerPlans,
+    mountOverlay() { render('overlay') },
+    mountSettings() { render('settings') },
+    unmountOverlay() { unmount('overlay') },
+    unmountSettings() { unmount('settings') },
+    setMainSession(sessionId) { mainSession.set({ key: sessionId === null ? undefined : String(sessionId) }) },
+    setSessions(specs) {
+      const next = new Map()
+      for (const spec of Array.isArray(specs) ? specs : []) {
+        const interaction = makeInteraction(spec)
+        next.set(String(spec.sessionId), {
+          running: false,
+          pendingInteraction: interaction,
+          completionUnread: false,
+        })
+        if (Array.isArray(spec.answerPlan)) answerPlans.set(interaction.key, [...spec.answerPlan])
+      }
+      statusStore.set(next)
+    },
+    setScopeStatus(status, writable = config.writable) {
+      config.status = status
+      config.writable = writable
+      publishConfig()
+    },
+    setConfig(value) {
+      config.value = { ...config.value, ...(value && typeof value === 'object' ? value : {}) }
+      config.revision += 1
+      publishConfig()
+    },
+    setMutateFailure(value) { config.failMutate = value === true },
+    setSetFailure(value) { config.failSet = value === true },
+    deferWrites(value) { config.deferWrites = value === true },
+    finishWrite(accepted = true) {
+      const pending = config.pendingWrites.shift()
+      if (!pending) throw new Error('no deferred fixture write')
+      pending.resolve(accepted ? pending.commit() : false)
+    },
+    getScopeCalls() { return deepCopy(config.calls) },
+    resetScopeCalls() { config.calls.splice(0) },
+    getConfig() { return deepCopy(config.value) },
+    getAnswerCalls() { return deepCopy(calls) },
+  }
+
+  render('overlay')
+  window.__fixture.ready = true
+})()
+</script>

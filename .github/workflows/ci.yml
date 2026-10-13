@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['20', '22', '24']
     steps:
       - uses: actions/checkout@v4
 
@@ -33,3 +33,30 @@ jobs:
       # DSH-specific: lib/client.js and cordis.patch.yml both fail silently
       # when they are missing from the tarball.
       - run: npm run check:pack
+
+  quality:
+    name: release quality and isolated tarball install (node 24)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      # Keep the real DSH runtime out of the repository and out of any user
+      # profile. The host harness creates a random DSH_HOME for each test.
+      - name: Install pinned DSH CLI in runner temp
+        shell: bash
+        run: |
+          set -euo pipefail
+          cli_root="$RUNNER_TEMP/dsh-cli"
+          mkdir -p "$cli_root"
+          npm install --prefix "$cli_root" --package-lock=false --no-save "@deepseek-ai/dsh@0.2.0-rc.2"
+          echo "DSH_TEST_CLI=$cli_root/node_modules/@deepseek-ai/dsh/lib/bin.js" >> "$GITHUB_ENV"
+
+      - run: npm run quality

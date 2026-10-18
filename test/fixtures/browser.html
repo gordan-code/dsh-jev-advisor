@@ -66,6 +66,8 @@
     redactSensitive: true,
     transcriptMessages: 12,
     timeoutMs: 30000,
+    cardDock: '',
+    cardCollapsed: false,
   }
   const config = {
     value: { ...defaultConfig },
@@ -133,6 +135,7 @@
   const calls = []
   const answerPlans = new Map()
   const interactions = new Map()
+  const interactionStates = new Map()
 
   function makeInteraction(spec) {
     const sessionId = String(spec.sessionId)
@@ -158,6 +161,7 @@
       sessionId,
       key,
       questions: normalizedQuestions,
+      ...(spec.review === true ? { review: [] } : {}),
       answer(payload) {
         calls.push({ sessionId, interactionKey: key, payload: deepCopy(payload) })
         const plan = answerPlans.get(key) ?? []
@@ -166,6 +170,10 @@
         return Promise.resolve()
       },
     }
+    const state = store({ closed: spec.closed === true, channel: spec.channel ?? 'waterfall', state: 'open' })
+    interaction.getSnapshot = state.getSnapshot
+    interaction.subscribe = state.subscribe
+    interactionStates.set(key, state)
     interactions.set(key, interaction)
     return interaction
   }
@@ -261,6 +269,7 @@
             'settings.rejected': 'The host rejected the write; settings may have changed in another window. Your edits are kept; try again.',
             'settings.blankKey': 'A blank key does not remove stored credentials. Use Clear key to remove them.',
             'settings.help': 'Fixture',
+            'panel.layoutSaveFailed': 'Layout could not be saved to this profile; kept for this mount only. Adjust it again to retry.',
           }
           const template = values[key] ?? key
           return params === undefined ? template : template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
@@ -299,13 +308,8 @@
   const roots = { overlay: null, settings: null }
   const commits = { overlay: 0, settings: 0 }
   function ObservedComponent({ kind, component, props }) {
-    // Keep the commit counter tied to the same external stores as the real
-    // slot host. It lets tests await a React commit rather than sleep.
-    React.useSyncExternalStore(statusStore.subscribe, statusStore.getSnapshot, statusStore.getSnapshot)
-    React.useSyncExternalStore(configScope.subscribe, configScope.getSnapshot, configScope.getSnapshot)
-    React.useSyncExternalStore(mainSession.subscribe, mainSession.getSnapshot, mainSession.getSnapshot)
-    React.useLayoutEffect(() => { commits[kind] += 1 })
-    return React.createElement(component, props)
+    // 只观察真实提交，不替产品订阅任何状态，避免夹具掩盖漏订阅问题。
+    return React.createElement(React.Profiler, { id: kind, onRender() { commits[kind] += 1 } }, React.createElement(component, props))
   }
   function render(kind) {
     const registrationEntry = kind === 'overlay' ? overlayRegistration : settingsRegistration
@@ -348,6 +352,11 @@
       }
       statusStore.set(next)
     },
+    setInteractionState(key, patch) {
+      const source = interactionStates.get(key)
+      if (!source) throw new Error('unknown fixture interaction')
+      source.set({ ...source.getSnapshot(), ...patch })
+    },
     setScopeStatus(status, writable = config.writable) {
       config.status = status
       config.writable = writable
@@ -364,7 +373,12 @@
     finishWrite(accepted = true) {
       const pending = config.pendingWrites.shift()
       if (!pending) throw new Error('no deferred fixture write')
-      pending.resolve(accepted ? pending.commit() : false)
+      pending.resolve(accepted ? (Object.hasOwn(pending, 'result') ? pending.result : pending.commit()) : false)
+    },
+    commitWriteBeforeAck() {
+      const pending = config.pendingWrites[0]
+      if (!pending) throw new Error('no deferred fixture write')
+      pending.result = pending.commit()
     },
     getScopeCalls() { return deepCopy(config.calls) },
     resetScopeCalls() { config.calls.splice(0) },

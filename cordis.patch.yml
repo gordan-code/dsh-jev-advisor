@@ -4,7 +4,7 @@
 # installed through the official CLI
 #
 #   dsh plugin --profile <name> add github:gordan-code/dsh-jev-advisor
-#   dsh plugin --profile <name> add dsh-jev-advisor          # once it is on npm
+#   dsh plugin --profile <name> add dsh-jev-advisor
 #
 # the command reconciles `dsh.profile.bundles` against installed packages and,
 # seeing this declaration, appends `dsh-jev-advisor` to the bundle stack.

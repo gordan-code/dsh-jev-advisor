@@ -368,6 +368,7 @@ test('settings save validates the full draft and commits one atomic mutate', asy
 		assert.deepEqual(await page.evaluate(() => window.__fixture.getConfig()), {
 			apiKey: 'sk-fixture', endpoint: 'https://fixture.example/v1', model: 'jev-browser', enabled: false,
 			includeTranscript: true, requireConfirmation: true, redactSensitive: false, transcriptMessages: 7, timeoutMs: 45000,
+			cardDock: '', cardCollapsed: false,
 		})
 	})
 })
@@ -714,7 +715,7 @@ test('temporary preference in confirmation mode re-prepares instead of advising 
 	})
 })
 
-test('dock and collapsed layout persists as a namespaced two-field preference and storage refusal is harmless', async (t) => {
+test('布局保存到 profile，重载后恢复且不再发起额外评估', async (t) => {
 	await withBrowser(t, async ({ page, harness }) => {
 		harness.setAdviseMode('auto')
 		await mountOverlay(page, [question('session-a', 'interaction-layout', 'Layout')], 'session-a')
@@ -722,9 +723,13 @@ test('dock and collapsed layout persists as a namespaced two-field preference an
 		await card.getByText('Layout fast', { exact: true }).waitFor({ state: 'visible' })
 		await card.getByRole('button', { name: 'Dock right' }).click()
 		await card.getByRole('button', { name: 'Collapse' }).click()
-		assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('dsh-jev-advisor:layout:v1'))), { dock: 'right', collapsed: true })
+		await page.waitForFunction(() => window.__fixture.getConfig().cardDock === 'right' && window.__fixture.getConfig().cardCollapsed === true)
+		const saved = await page.evaluate(() => window.__fixture.getConfig())
+		assert.equal(harness.getRecords('advise').length, 1, '改变停靠与折叠不能重新计费')
+		assert.equal(await page.evaluate(() => localStorage.getItem('dsh-jev-advisor:layout:v1')), null)
 		await page.reload({ waitUntil: 'load' })
 		await page.waitForFunction(() => window.__fixture?.ready === true)
+		await page.evaluate(value => window.__fixture.setConfig(value), saved)
 		await mountOverlay(page, [question('session-a', 'interaction-layout-reload', 'Layout reload')], 'session-a')
 		const reloaded = page.locator('[data-dsh-jev-advisor="advice"]')
 		await reloaded.getByText('Layout reload fast', { exact: true }).waitFor({ state: 'hidden' })
@@ -735,5 +740,162 @@ test('dock and collapsed layout persists as a namespaced two-field preference an
 		await page.evaluate(() => window.__fixture.setSessions([{ sessionId: 'session-a', interactionKey: 'interaction-layout-storage-denied', question: 'Storage denied', options: ['Storage fast', 'Storage careful'] }]))
 		await reloaded.waitFor({ state: 'visible' })
 		assert.equal(await reloaded.getAttribute('data-dock'), 'right')
+	})
+})
+
+test('profile 布局跨浏览器端口恢复，临时决策偏好不进入 profile', async (t) => {
+	let saved, firstOrigin
+	await withBrowser(t, async ({ page, harness }) => {
+		firstOrigin = harness.origin
+		await mountOverlay(page, [question('a', 'port-one', 'Port one')], 'a')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('Port one fast', { exact: true }).waitFor()
+		await card.locator('textarea').fill('This preference stays temporary')
+		await card.getByRole('button', { name: 'Dock right' }).click()
+		await card.getByRole('button', { name: 'Collapse' }).click()
+		await page.waitForFunction(() => window.__fixture.getConfig().cardCollapsed === true)
+		saved = await page.evaluate(() => window.__fixture.getConfig())
+		assert.doesNotMatch(JSON.stringify(saved), /This preference|decisionPreference|port-one/)
+	})
+	await withBrowser(t, async ({ page, harness }) => {
+		assert.notEqual(harness.origin, firstOrigin)
+		await page.evaluate(value => window.__fixture.setConfig(value), saved)
+		await mountOverlay(page, [question('b', 'port-two', 'Port two')], 'b')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.waitFor()
+		assert.equal(await card.getAttribute('data-dock'), 'right')
+		assert.equal(await card.getAttribute('data-collapsed'), 'true')
+		await card.getByRole('button', { name: 'Expand' }).click()
+		assert.equal(await card.locator('textarea').inputValue(), '')
+	})
+})
+
+test('异步问题仅通道切换也刷新 UI：waterfall 转 rpc 可采纳，关闭后不可提交', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await mountOverlay(page, [question('s', 'async-question', 'Async')], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('Async fast', { exact: true }).waitFor()
+		await page.evaluate(() => window.__fixture.setInteractionState('async-question', { channel: 'rpc', state: 'continued' }))
+		assert.equal(harness.getRecords('advise').length, 1)
+		await card.getByRole('button', { name: /Adopt Jev/ }).click()
+		assert.equal((await page.evaluate(() => window.__fixture.getAnswerCalls())).length, 1)
+		await page.evaluate(() => window.__fixture.setInteractionState('async-question', { channel: 'none', closed: true }))
+		await card.waitFor({ state: 'hidden' })
+		assert.equal(harness.getRecords('advise').length, 1)
+	})
+})
+
+test('已移除通道取消旧请求，重新可回答时只显示新的建议', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		harness.setAdviseMode('manual')
+		await mountOverlay(page, [question('s', 'async-wait', 'Waiting')], 's')
+		const first = await harness.waitForAdvise()
+		await page.evaluate(() => window.__fixture.setInteractionState('async-wait', { channel: 'none' }))
+		await harness.waitForResponseClose(first)
+		assert.equal(await page.locator('[data-dsh-jev-advisor="advice"]').count(), 0)
+		await page.evaluate(() => window.__fixture.setInteractionState('async-wait', { channel: 'rpc', state: 'continued' }))
+		const second = await harness.waitForAdvise(record => record !== first)
+		await harness.resolveAdvise(second)
+		await page.getByText('Waiting fast', { exact: true }).waitFor()
+	})
+})
+
+test('停用再启用只挂载一张卡片，旧请求与旧预览不会复活', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		harness.setAdviseMode('manual')
+		await mountOverlay(page, [question('s', 'toggle-question', 'Toggle')], 's')
+		const old = await harness.waitForAdvise()
+		await page.evaluate(() => { window.__fixture.unmountOverlay(); window.__fixture.mountOverlay() })
+		await harness.waitForResponseClose(old)
+		const next = await harness.waitForAdvise(record => record !== old)
+		await harness.resolveAdvise(next)
+		await page.getByText('Toggle fast', { exact: true }).waitFor()
+		assert.equal(await page.locator('[data-dsh-jev-advisor="advice"]').count(), 1)
+		assert.equal((await page.evaluate(() => window.__fixture.getAnswerCalls())).length, 0)
+	})
+})
+
+test('布局写入被拒绝时显示提示，保留本次布局且仍可采纳', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await mountOverlay(page, [question('s', 'layout-refusal', 'Refusal')], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('Refusal fast', { exact: true }).waitFor()
+		await page.evaluate(() => window.__fixture.setMutateFailure(true))
+		await card.getByRole('button', { name: 'Dock right' }).click()
+		await card.getByText(/Layout could not be saved/).waitFor()
+		assert.equal(await card.getAttribute('data-dock'), 'right')
+		assert.equal(harness.getRecords('advise').length, 1)
+		assert.equal(await card.getByRole('button', { name: /Adopt Jev/ }).isDisabled(), false)
+		assert.equal((await page.evaluate(() => window.__fixture.getScopeCalls())).length, 1)
+		await page.evaluate(() => window.__fixture.setMutateFailure(false))
+		await card.getByRole('button', { name: 'Collapse' }).click()
+		await page.waitForFunction(() => window.__fixture.getConfig().cardCollapsed === true)
+		assert.equal(await card.getByText(/Layout could not be saved/).count(), 0)
+	})
+})
+
+test('预览中的布局保存不替换令牌、不发评估，卸载后重新准备', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await page.evaluate(() => window.__fixture.setConfig({ requireConfirmation: true }))
+		await mountOverlay(page, [question('s', 'preview-layout', 'Preview layout')], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByRole('button', { name: 'Confirm and send' }).waitFor()
+		const before = await harness.waitForPrepare()
+		await card.getByRole('button', { name: 'Dock right' }).click()
+		await page.waitForFunction(() => window.__fixture.getConfig().cardDock === 'right')
+		assert.equal(harness.getRecords('prepare').length, 1)
+		assert.equal(harness.getRecords('advise').length, 0)
+		await page.evaluate(() => { window.__fixture.unmountOverlay(); window.__fixture.mountOverlay() })
+		await harness.waitForPrepare(record => record !== before)
+		await card.getByRole('button', { name: 'Confirm and send' }).click()
+		const sent = await harness.waitForAdvise()
+		assert.equal(sent.body.previewToken, `preview-${harness.getRecords('prepare').at(-1).body.requestId}`)
+	})
+})
+
+test('异步清 Key 卸载后完成不能刷新旧页或清掉新挂载的草稿', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await page.evaluate(() => { window.__fixture.deferWrites(true); window.__fixture.mountSettings() })
+		const settings = page.locator('#settings-root')
+		await settings.getByText('Stored', { exact: true }).waitFor()
+		await settings.getByRole('button', { name: 'Clear key' }).click()
+		await page.evaluate(() => { window.__fixture.unmountSettings(); window.__fixture.mountSettings() })
+		await settings.getByText('Stored', { exact: true }).waitFor()
+		await settings.getByLabel('API key').fill('new-fixture-draft')
+		const before = harness.getRecords('status').length
+		await page.evaluate(() => window.__fixture.finishWrite(false))
+		await settings.getByLabel('API key').inputValue().then(value => assert.equal(value, 'new-fixture-draft'))
+		assert.equal(harness.getRecords('status').length, before)
+	})
+})
+
+test('布局镜像先到而 CAS 回执未到时隐藏旧建议，接受后恢复且不重新评估', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await mountOverlay(page, [question('s', 'layout-ack', 'Ack')], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('Ack fast', { exact: true }).waitFor()
+		await page.evaluate(() => window.__fixture.deferWrites(true))
+		await card.getByRole('button', { name: 'Dock right' }).click()
+		await page.evaluate(() => window.__fixture.commitWriteBeforeAck())
+		await card.getByText('Ack fast', { exact: true }).waitFor({ state: 'hidden' })
+		assert.equal(await card.getByRole('button', { name: /Adopt Jev/ }).count(), 0)
+		await page.evaluate(() => window.__fixture.finishWrite())
+		await card.getByText('Ack fast', { exact: true }).waitFor()
+		assert.equal(harness.getRecords('advise').length, 1)
+	})
+})
+
+test('来源不明的布局修订仍使旧建议失效，不能误判隐藏 Key 与布局的混合写入', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		await mountOverlay(page, [question('s', 'external-layout', 'External')], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('External fast', { exact: true }).waitFor()
+		harness.setAdviseMode('manual')
+		await page.evaluate(() => window.__fixture.setConfig({ cardDock: 'right' }))
+		const next = await harness.waitForAdvise(record => record !== harness.getRecords('advise')[0])
+		assert.equal(await card.getByRole('button', { name: /Adopt Jev/ }).count(), 0)
+		await harness.resolveAdvise(next)
+		await card.getByText('External fast', { exact: true }).waitFor()
+		assert.equal(harness.getRecords('advise').length, 2)
 	})
 })

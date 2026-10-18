@@ -56,6 +56,8 @@ export declare const Config: Schema<{
   redactSensitive: boolean
   transcriptMessages: number
   timeoutMs: number
+  cardDock: '' | 'left' | 'right'
+  cardCollapsed: boolean
 }>
 
 /** One pending question, normalized for Jev. */

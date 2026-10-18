@@ -78,13 +78,16 @@ dsh plugin --profile <your-profile> add /absolute/path/to/dsh-jev-advisor
 
 ### From npm
 
-Not published yet. The name is reserved and free.
+Available on npm. Omitting a version installs the registry's current release, not necessarily
+the version in this checkout. Use `dsh-jev-advisor@<published-version>` to request an exact release;
+0.1.6 must be published before that exact version can be installed from npm.
 
 ```bash
 dsh plugin --profile <your-profile> add dsh-jev-advisor
 ```
 
-Then restart the host and open **Settings → Jev** to paste your API key.
+Then open **Settings → Jev** to paste your API key. Restart the host and refresh the page if DSH
+requests a restart or the plugin does not appear.
 
 ### Update / uninstall
 
@@ -96,6 +99,11 @@ dsh plugin --profile <your-profile> add github:gordan-code/dsh-jev-advisor
 A git install tracks the ref you asked for, so updating means re-running `add` (or `pnpm update`
 inside the profile directory). There is no semver range unless you write
 `github:gordan-code/dsh-jev-advisor#semver:^0.1.0`.
+
+On DSH 0.2.1-rc.2, replaceable plugin changes can take effect with hot reload enabled. Otherwise
+follow DSH's restart prompt. If the card reports an out-of-date host bridge, restart the host
+**and** refresh the browser; a page refresh alone does not replace host code. Check the installed
+version shown by DSH, especially when its release-age policy selects an older npm release.
 
 ## Configure
 
@@ -232,10 +240,16 @@ and the card says so, rather than silently submitting an empty answer for the re
 - **Copy without adopting:** copy a complete, valid suggested answer batch as readable text, keeping
   original question and option wording. Copying does not submit answers or request another evaluation.
   Incomplete, invalid and “none of the above” batches cannot be copied as if they were full answers.
-- **Remember layout:** left/right docking and collapse state are stored in browser local storage.
-  No API key, conversation text, request/response or decision preference is stored there. This is
-  same-origin browser storage: changing the host's port or browser profile does not share the preference.
-  If storage is blocked or damaged, the card safely falls back to the current page's layout state.
+- **Remember layout (updated in 0.1.6):** docking and collapse state are saved as `cardDock` and
+  `cardCollapsed` in this plugin's current DSH profile. They survive browser-port changes and are
+  shared by browsers connected to that profile, but not by unrelated profiles. Only these layout
+  fields are written; temporary preferences, question text and responses are not saved as layout.
+  A legacy same-origin browser preference is migrated when no profile layout has been saved; it
+  cannot be recovered from an old port the browser can no longer access. Rejected or read-only
+  writes keep the current mounted card's layout and show a notice; adjusting it retries the save.
+  Confirmed layout writes from this card do not request another Jev evaluation or invalidate an
+  existing preview. Unrecognized revisions from another window are conservatively treated as
+  configuration changes, since a hidden API key may have changed in the same atomic write.
 - **Temporary decision preference:** enter a short preference such as “prioritize stability”, “finish
   quickly” or “minimize code changes”, then click **Apply and reevaluate**. Typing alone makes no call.
   The text is limited to 500 UTF-16 code units and applies only to the current interaction; switching
@@ -246,6 +260,21 @@ and the card says so, rather than silently submitting an empty answer for the re
 
 The previously staged correctness, host integration and privacy improvements are included in this
 single **0.1.5** update from 0.1.4; intermediate development version labels were not release versions.
+
+### DSH compatibility patch (0.1.6)
+
+- Declares the exact supported DSH runtimes `0.2.0-rc.2` and `0.2.1-rc.2` through `engines.dsh`.
+  Future releases are not assumed compatible; expand this declaration only after verification.
+- Observes the public question-card snapshot as well as Session status. `waterfall` and continued
+  `rpc` answers remain available; closed, historical-review and temporarily channel-less questions
+  do not request advice or accept stale adoption events.
+  The root overlay subscribes directly to the public main-Session binding, even when the Session
+  status Map itself is unchanged. Browser fixtures do not supply that subscription on its behalf.
+- Covers overlay remount, cancelled requests, preview replacement, queued layout writes, async
+  settings saves and key clearing. A write already accepted by the host cannot be undone on unmount.
+- Keeps outbound credential masking. DSH's message-display masking is not outbound redaction and
+  does not replace this plugin's own controls. The loopback-only trust boundary is unchanged;
+  remote hosts and reverse-proxy path prefixes are not added by this patch.
 
 ## Development
 
@@ -263,7 +292,8 @@ npm pack --dry-run         # confirm the published file list
 ```
 
 `.github/workflows/ci.yml` runs `npm ci`, `npm test`, and `check:pack` on Node 20, 22, and 24.
-A Node 24 quality job runs the same unified gate with Chromium and pinned DSH 0.2.0-rc.2.
+Two Node 24 quality jobs run the same unified gate with Chromium and separately pinned DSH
+0.2.0-rc.2 and 0.2.1-rc.2.
 `npm test` also covers adversarial answer mapping, route rejection paths, deterministic hook/effect
 lifecycle tests, and a real loopback HTTP bridge-to-mock round trip. Those tests need no real API key
 and write no request dumps into the repository.
@@ -286,7 +316,9 @@ It is not a full DSH Desktop UI test.
 
 `test:host` starts the real DSH CLI with a random temporary `DSH_HOME`, scratch profile, random
 loopback ports, and an in-memory TypeSafe mock. It checks the mounted routes, request binding,
-correct/wrong/missing keys, and HTTP rejection paths, then stops its processes and removes its
+correct/wrong/missing keys, HTTP rejection paths, official settings Remote writes, and persisted
+layout after a real process restart. Separate lifecycle checks cover route/evaluation/preview
+cleanup and failed-start cleanup. These are not full Desktop hot-reload UI tests. It removes its
 temporary profile. It never uses a real Jev key or the user's DSH profile. Set `DSH_TEST_CLI` to a
 pinned CLI entry point (or install that CLI where module resolution can find it); no PATH-based
 fallback is used. For example, in PowerShell:
@@ -315,8 +347,8 @@ missing prerequisites are failures, not skipped checks. It ignores the developme
 commit anything. `npm ci`, the Chromium installation and the pinned CLI installation are setup
 steps, not automatically performed against a user's profile by the gate.
 
-CI installs `@deepseek-ai/dsh@0.2.0-rc.2` under the runner's temporary directory. Local full-host
-verification used the same version on Node 24; the CI jobs still need to run on GitHub.
+CI installs each pinned DSH runtime under the runner's temporary directory. Local verification
+also uses isolated scratch profiles; GitHub CI still needs to run after these changes are pushed.
 
 For a manual probe of an **already running scratch host configured to the local mock**, pass its
 tokenized launch URL as `DSH_E2E_BASE` or `node test/e2e.mjs <tokenized-url>`. The mock CLI accepts
@@ -353,10 +385,9 @@ plugin's internals.
 
 ## Known limitations
 
-- **Requires Config-backed settings, `ConfigFormController.mutate`, and `uiSession.adapter.current`
-  (0.1.7-rc.1 or newer).** These interfaces were checked against the published 0.1.7-rc.1 client
-  bundles and local DSH 0.2.0-rc.2 code. There is no legacy `settingsScope` fallback. Full-host
-  integration tests pin a specific runtime instead of silently testing whatever `dsh` is on PATH.
+- **Supports DSH 0.2.0-rc.2 and 0.2.1-rc.2.** Requires Config-backed settings,
+  `ConfigForm.mutate`, `uiSession.adapter.current` and public question-card snapshots. There is no
+  legacy `settingsScope` fallback. Full-host tests pin both runtimes rather than using PATH's `dsh`.
 - Sidebar avoidance is manual (left/right docking), not private-DOM detection. A wide host panel can
   still overlap the card; switch sides or collapse/dismiss it. Narrow-screen overflow is covered by
   Chromium tests, but a full DSH Desktop visual test has not been automated.

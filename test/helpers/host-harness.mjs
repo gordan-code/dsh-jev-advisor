@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises'
-import { lstatSync } from 'node:fs'
+import { lstatSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -12,19 +13,28 @@ import { createMockTypeSafeServer } from '../mock-typesafe.mjs'
 const TEST_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
 const PROJECT_ROOT = resolve(TEST_DIR, '..')
 const require_ = createRequire(import.meta.url)
-const STARTUP_TIMEOUT_MS = 45_000
+// 0.2.1-rc.2 的首次 Web profile 启动明显慢于 0.2.0；保留足够余量，
+// 但仍在单个真实宿主测试的总超时内快速报告卡死。
+const STARTUP_TIMEOUT_MS = 60_000
 const STOP_TIMEOUT_MS = 5_000
 const MAX_OUTPUT = 2 * 1024 * 1024
 
 /** Resolve the real CLI without falling back to a user's installed profile. */
 export function resolveDshCli() {
   const configured = process.env.DSH_TEST_CLI?.trim()
-  if (configured !== undefined && configured !== '') return resolve(configured)
-  try {
-    return require_.resolve('@deepseek-ai/dsh/lib/bin.js')
-  } catch {
-    throw new Error('real DSH CLI unavailable; set DSH_TEST_CLI to the pinned @deepseek-ai/dsh@0.2.0-rc.2/lib/bin.js path')
+  const cli = configured !== undefined && configured !== '' ? resolve(configured) : (() => {
+    try {
+      return require_.resolve('@deepseek-ai/dsh/lib/bin.js')
+    } catch {
+      throw new Error('real DSH CLI unavailable; set DSH_TEST_CLI to the pinned @deepseek-ai/dsh@0.2.0-rc.2/lib/bin.js path')
+    }
+  })()
+  const expectedVersion = process.env.DSH_TEST_VERSION?.trim()
+  if (expectedVersion !== undefined && expectedVersion !== '') {
+    const manifest = JSON.parse(readFileSync(join(dirname(dirname(cli)), 'package.json'), 'utf8'))
+    assert.equal(manifest.version, expectedVersion, `DSH_TEST_CLI version mismatch: expected ${expectedVersion}, got ${String(manifest.version)}`)
   }
+  return cli
 }
 
 function appendBounded(current, chunk) {
@@ -97,10 +107,15 @@ async function packPeerFixtures(home, projectRoot, npmCli, env) {
   })
 }
 
-async function createProfile(home, { endpoint, apiKey, requireConfirmation = false, redactSensitive = true, projectRoot = PROJECT_ROOT, packageTarball, npmCache }) {
+async function createProfile(home, { endpoint, apiKey, requireConfirmation = false, redactSensitive = true, projectRoot = PROJECT_ROOT, packageTarball, npmCache, reuse = false }) {
   const profile = join(home, 'profiles', 'scratch')
   const nodeModules = join(profile, 'node_modules')
   const pluginLink = join(nodeModules, 'dsh-jev-advisor')
+  if (reuse) {
+    await readFile(join(profile, 'package.json'))
+    assert.ok(lstatSync(pluginLink), `reused DSH profile is missing the plugin entry: ${pluginLink}`)
+    return { profile, pluginLink }
+  }
   await mkdir(nodeModules, { recursive: true })
   await writeFile(join(profile, 'package.json'), `${JSON.stringify({
     name: 'dsh-profile-scratch',
@@ -204,7 +219,12 @@ export async function startHost(options = {}) {
     throw new Error(`real DSH CLI unavailable at ${cli}; set DSH_TEST_CLI to @deepseek-ai/dsh@0.2.0-rc.2/lib/bin.js`)
   }
 
-  const home = await mkdtemp(join(tmpdir(), 'dsh-jev-host-'))
+  const reusedHome = options.home !== undefined
+  const home = reusedHome ? await realpath(resolve(options.home)) : await mkdtemp(join(tmpdir(), 'dsh-jev-host-'))
+  if (reusedHome) {
+    const tempRoot = await realpath(tmpdir())
+    assert.ok(isPathInside(home, tempRoot), `refusing to use non-temporary harness path: ${home}`)
+  }
   const mock = options.mock ?? await createMockTypeSafeServer({ port: 0 })
   let profile
   let child
@@ -220,6 +240,7 @@ export async function startHost(options = {}) {
       projectRoot: options.projectRoot ?? PROJECT_ROOT,
       packageTarball: options.packageTarball,
       npmCache: options.npmCache,
+      reuse: reusedHome,
     })
     cleanupLinks.push(profile.pluginLink)
     child = spawn(process.execPath, [
@@ -291,16 +312,45 @@ export async function startHost(options = {}) {
           redirect: 'manual',
         }))
       },
+      /**
+       * 调用 ConfigFormController 使用的官方 settings Remote 信封。
+       * 辅助器因此可以在真实宿主测试中复用 configForms.mutate 的线路契约，
+       * 而不触碰宿主私有 API。
+       */
+      async settingsDescribe() {
+        const result = await this.request('/api/settings/describe', {
+          method: 'POST',
+          body: {
+            type: 'client-request', rpcId: randomUUID(), method: 'settings/describe', payload: { args: {} },
+          },
+        })
+        assert.equal(result.response.status, 200, `settings/describe: expected HTTP 200, got ${String(result.response.status)} body=${result.text}`)
+        assert.equal(result.value?.result?.ok, true, `settings/describe failed: ${result.text}`)
+        return result.value.result.value
+      },
+      async settingsMutate(ns, ops, expectedRevision) {
+        const result = await this.request('/api/settings/mutate', {
+          method: 'POST',
+          body: {
+            type: 'client-request', rpcId: randomUUID(), method: 'settings/mutate',
+            payload: { args: { ns, ops, expectedRevision } },
+          },
+        })
+        assert.equal(result.response.status, 200, `settings/mutate: expected HTTP 200, got ${String(result.response.status)} body=${result.text}`)
+        assert.equal(result.value?.result?.ok, true, `settings/mutate failed: ${result.text}`)
+        return result.value.result.value
+      },
       async stop() {
         await terminateChild(child)
         if (options.mock === undefined) await mock.close()
-        await removeHarnessDirectory(home, cleanupLinks)
+        if (options.keepHome !== true) await removeHarnessDirectory(home, cleanupLinks)
       },
     }
     return host
   } catch (error) {
     if (child !== undefined) await terminateChild(child)
     if (options.mock === undefined) await mock.close().catch(() => {})
+    // 启动失败时调用方拿不到 host.stop()；即使 keepHome 也必须回收失败夹具。
     await removeHarnessDirectory(home, cleanupLinks).catch(() => {})
     throw error
   }

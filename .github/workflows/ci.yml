@@ -35,8 +35,12 @@ jobs:
       - run: npm run check:pack
 
   quality:
-    name: release quality and isolated tarball install (node 24)
+    name: release quality and isolated tarball install (node 24, DSH ${{ matrix.dsh }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh: ['0.2.0-rc.2', '0.2.1-rc.2']
     steps:
       - uses: actions/checkout@v4
 
@@ -54,9 +58,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cli_root="$RUNNER_TEMP/dsh-cli"
-          mkdir -p "$cli_root"
-          npm install --prefix "$cli_root" --package-lock=false --no-save "@deepseek-ai/dsh@0.2.0-rc.2"
+          cli_root="$(mktemp -d "$RUNNER_TEMP/dsh-cli-XXXXXX")"
+          npm install --prefix "$cli_root" --package-lock=false --no-save --registry=https://registry.npmjs.org "@deepseek-ai/dsh@${{ matrix.dsh }}"
           echo "DSH_TEST_CLI=$cli_root/node_modules/@deepseek-ai/dsh/lib/bin.js" >> "$GITHUB_ENV"
+          echo "DSH_TEST_VERSION=${{ matrix.dsh }}" >> "$GITHUB_ENV"
 
       - run: npm run quality

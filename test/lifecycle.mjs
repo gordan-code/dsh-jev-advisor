@@ -79,6 +79,7 @@ function harness(t) {
   }
   return {
     internals, requests, snapshot, render,
+	  unmount() { for (const slot of slots) slot?.cleanup?.() },
     setInteraction(value) { interaction = value },
     body: () => find(tree, (node) => node.type === internals.JevAdviceBody)?.props,
     error: () => find(tree, (node) => node.props.key === 'error')?.props.children.join(''),
@@ -95,6 +96,22 @@ const value = { advice: [{
   probabilities: [{ index: 0, label: 'A', probability: 0.8 }, { index: 1, label: 'B', probability: 0.2 }],
 }] }
 const interaction = (key, answer = async () => {}, sessionId = 'session-a') => ({ key, sessionId, questions, answer })
+
+test('已卸载浮层捕获的采纳事件与已关闭通道都不能提交', async t => {
+	const h = harness(t)
+	let submissions = 0
+	let snapshot = { closed: false, channel: 'waterfall' }
+	const current = { ...interaction('live', async () => { submissions++ }), getSnapshot: () => snapshot }
+	h.setInteraction(current); h.render(); h.requests[0].respond(value); await h.settle()
+	const adopt = h.body().onAdopt
+	snapshot = { closed: true, channel: 'none' }
+	await adopt()
+	assert.equal(submissions, 0)
+	snapshot = { closed: false, channel: 'rpc' }
+	h.unmount()
+	await adopt()
+	assert.equal(submissions, 0)
+})
 
 test('a new interaction with identical questions triggers a new evaluation', async (t) => {
   const h = harness(t)

@@ -113,6 +113,18 @@ test('预览不发上游；确认发送的正文必须与预览快照相同', as
   assert.equal(sent.body.value.privacy.requestBytes, preview.body.value.privacy.requestBytes)
 })
 
+test('布局配置变化不使已有宿主预览失效，也不进入 Jev 请求', async t => {
+  const f = await fixture(t, { requireConfirmation: true })
+  const preview = await f.post('prepare', binding)
+  f.settings.cardDock = 'right'
+  f.settings.cardCollapsed = true
+  const sent = await f.post('advise', { ...binding, previewToken: preview.body.value.previewToken })
+  assert.equal(sent.status, 200)
+  assert.deepEqual(f.upstream.requests[0].body, preview.body.value.request)
+  assert.doesNotMatch(JSON.stringify(f.upstream.requests[0].body), /cardDock|cardCollapsed/)
+  assert.equal(f.upstream.requests.length, 1)
+})
+
 test('自动模式保留偏好绑定；关闭会话上下文也发送显式偏好', async (t) => {
   const f = await fixture(t, { includeTranscript: false })
   f.setTranscript('this transcript must not be sent')

@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-advisor",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Jev (TypeSafe System One) gives the human a second opinion, not the agent. When DSH's model asks you a multiple-choice question, dsh-jev-advisor builds a structured Jev request and floats the recommendation, probability spread and confidence beside the options - one click to adopt. API key lives in Settings. No prompt changes.",
   "keywords": [
     "dsh",
@@ -51,7 +51,8 @@
     "docs/README.zh.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2"
   },
   "dsh": {
     "bundle": {
@@ -83,7 +84,7 @@
     "build": "node scripts/build.mjs",
     "check:build": "node scripts/build.mjs --check",
     "check:pack": "node scripts/check-pack.mjs",
-    "test": "node scripts/build.mjs --check && node test/smoke.mjs && node test/client.mjs && node --test test/correctness.mjs test/routes.mjs test/lifecycle.mjs test/session-settings.mjs test/settings-lifecycle.mjs test/privacy.mjs test/transport.mjs test/decision-ux.mjs test/quality.mjs",
+    "test": "node scripts/build.mjs --check && node test/smoke.mjs && node test/client.mjs && node --test test/correctness.mjs test/routes.mjs test/lifecycle.mjs test/session-settings.mjs test/settings-lifecycle.mjs test/privacy.mjs test/transport.mjs test/decision-ux.mjs test/layout.mjs test/pending-state.mjs test/quality.mjs",
     "test:browser": "node scripts/build.mjs --check && node --test test/browser.mjs",
     "test:host": "node scripts/build.mjs --check && node --test test/host-integration.mjs",
     "test:install": "node scripts/build.mjs --check && node --test test/install.mjs",

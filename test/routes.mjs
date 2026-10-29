@@ -70,6 +70,18 @@ test('status remains readable via GET for local diagnostics', async () => {
   assert.equal((await host()('status', { method: 'GET' })).statusCode, 200)
 })
 
+test('本地 status 的诊断和默认按需配置不请求上游，不披露凭据或用户路径', async t => {
+  t.mock.method(globalThis, 'fetch', () => { throw Error('local diagnostics must not fetch') })
+  const response = await host()('status', { method: 'GET' })
+  assert.equal(response.value.value.autoAdvise, false)
+  const report = response.value.value.diagnostics
+  assert.equal(report.autoAdvise, false)
+  assert.equal(report.dshVersion, null)
+  assert.equal(report.declarationMatch, 'unknown')
+  assert.equal(report.hasKey, false)
+  assert.equal(/apiKey|sessionId|packageDir|manifestPath/.test(JSON.stringify(report)), false)
+})
+
 for (const route of ['test', 'advise']) {
   test(`${route} rejects GET before performing billable work`, async () => {
     const response = await host()(route, { method: 'GET' })

@@ -39,6 +39,9 @@ asked. That is the whole product.
 
 You ask the agent to do something. It stops and asks you to choose. Instead of guessing, you get:
 
+**Since 0.1.7, click “Ask Jev” first.** On-demand is the default, including upgrades. You can enable
+automatic advice under **Settings → Jev → Automatically get Jev advice** and save.
+
 - **the recommended option**, badged, with the probability Jev assigned to it;
 - **the rest of the distribution**, so you can see whether it was 80/20 or 51/49;
 - **Jev's confidence** in its own answer;
@@ -109,20 +112,32 @@ version shown by DSH, especially when its release-age policy selects an older np
 
 **Settings → Jev**
 
+After saving your API key, wait for a multiple-choice question and click **Ask Jev**.
+To restore the old automatic behavior, enable **Automatically get Jev advice** and press **Save**.
+With confirmation enabled, either mode prepares a local preview first; only **Confirm and send** calls Jev.
+
 | Field | Default | Meaning |
 | --- | --- | --- |
 | API key | *(empty)* | TypeSafe key from <https://console.typesafe.ai/keys>. `role('secret')` removes it from settings reads; it is never echoed back to the browser. The profile's Cordis patch stores it in plain text, not encrypted. |
 | Endpoint | `https://api.typesafe.ai/v1/systemone` | Evaluation endpoint. |
 | Model | `jev-latest` | Jev model or alias (`jev-1.13.0`, `jev-preview`, …). |
 | Enable Jev advice | on | Master switch. |
+| Automatically get Jev advice | **off** | `autoAdvise=false`, including upgrades. Off: click **Ask Jev**; on: eligible questions start evaluation automatically. Confirmation still applies; actual sending may incur API usage. Save to apply. |
 | Send the recent conversation as the state | on | Whether the transcript tail is attached as `state.context`. |
-| Require confirmation before sending | off | Optional local preview; automatic advice remains the default. |
+| Require confirmation before sending | off | Optional local preview, independent of on-demand versus automatic mode. |
 | Mask common credentials before sending | on | Best-effort masking in outbound question/context text, not a complete privacy filter. |
 | Context messages | `12` | How many trailing transcript messages to include. |
 | Timeout (ms) | `30000` | Total evaluation timeout, including response reading and retry backoff. |
 
 **Test connection** sends one trivial `noul` question and reports the model that answered, so you can
 verify a freshly pasted key without waiting for a real question.
+It uses the saved configuration and may incur API usage. It is not part of the free local health check.
+
+**Local health check** shows plugin/runtime versions, the declared DSH range and its match status,
+Key-configured and effective mode/privacy flags. It never calls Jev. Missing host metadata is **Unknown**,
+not “compatible”; matching a declaration does not guarantee every feature. **Copy sanitized diagnostics**
+copies only these allowlisted facts, never the key, endpoint, user paths, question text or full configuration.
+The runtime version comes from the host installation resolution table, never PATH or a guessed CLI.
 
 The same values can be seeded from the cordis row's `config` (see `cordis.patch.yml`); user settings
 resolve above those defaults. Composition config supplies deployment defaults, not enforced policy.
@@ -210,7 +225,7 @@ and the card says so, rather than silently submitting an empty answer for the re
 
 ### Privacy, layout and cost control (0.1.5)
 
-- Automatic advice remains the default. Enable **Require confirmation before sending** to inspect
+- On-demand advice is the default in 0.1.7. Enable **Require confirmation before sending** to inspect
   the exact outbound JSON before pressing **Confirm and send**. Preparation stays on the local
   host. Confirmation uses that snapshot, not a newer transcript. Previews expire after two minutes;
   changing settings or request identity invalidates them. At most 32 previews are retained in memory.
@@ -257,6 +272,8 @@ and the card says so, rather than silently submitting an empty answer for the re
   local preview in confirmation mode). It does not change the agent prompt or persist to DSH settings.
   An explicit preference is sent even when transcript inclusion is off; credential masking and the
   full-request byte budget still apply. Changing it invalidates an old preview/advice identity.
+  Before the first on-demand request, **Save preference for this question** only stores it in memory;
+  click **Ask Jev** to use it. Once evaluation has started, **Apply and re-evaluate** explicitly requests a new evaluation.
 
 The previously staged correctness, host integration and privacy improvements are included in this
 single **0.1.5** update from 0.1.4; intermediate development version labels were not release versions.
@@ -276,6 +293,16 @@ single **0.1.5** update from 0.1.4; intermediate development version labels were
   does not replace this plugin's own controls. The loopback-only trust boundary is unchanged;
   remote hosts and reverse-proxy path prefixes are not added by this patch.
 
+### On-demand advice, diagnostics and DSH rc.3 (0.1.7)
+
+- **Behavior change:** automatic advice is now opt-in, including upgrades. A missing `autoAdvise`
+  setting means false; an explicitly enabled value remains enabled. Reload or restart the host as instructed and refresh the client after updating the plugin.
+- New questions and evaluation-affecting settings changes invalidate manual authorization and return to **Ask Jev**.
+  Cancelling a load and reopening does not resume it automatically; reopening a completed result reuses it.
+- Adds the visible automatic-mode switch, usage disclosure and local sanitized diagnostics described above.
+- Retains the explicit `engines.dsh` requirement and adds verified `0.2.1-rc.3` support.
+- Keeps `0.2.0-rc.2` and `0.2.1-rc.2` support; unverified future runtimes remain outside the declaration.
+
 ## Development
 
 ```bash
@@ -292,8 +319,8 @@ npm pack --dry-run         # confirm the published file list
 ```
 
 `.github/workflows/ci.yml` runs `npm ci`, `npm test`, and `check:pack` on Node 20, 22, and 24.
-Two Node 24 quality jobs run the same unified gate with Chromium and separately pinned DSH
-0.2.0-rc.2 and 0.2.1-rc.2.
+Three Node 24 quality jobs run the same unified gate with Chromium and separately pinned DSH
+0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3.
 `npm test` also covers adversarial answer mapping, route rejection paths, deterministic hook/effect
 lifecycle tests, and a real loopback HTTP bridge-to-mock round trip. Those tests need no real API key
 and write no request dumps into the repository.
@@ -385,9 +412,9 @@ plugin's internals.
 
 ## Known limitations
 
-- **Supports DSH 0.2.0-rc.2 and 0.2.1-rc.2.** Requires Config-backed settings,
+- **Supports DSH 0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3.** Requires Config-backed settings,
   `ConfigForm.mutate`, `uiSession.adapter.current` and public question-card snapshots. There is no
-  legacy `settingsScope` fallback. Full-host tests pin both runtimes rather than using PATH's `dsh`.
+  legacy `settingsScope` fallback. Full-host tests pin all three runtimes rather than using PATH's `dsh`.
 - Sidebar avoidance is manual (left/right docking), not private-DOM detection. A wide host panel can
   still overlap the card; switch sides or collapse/dismiss it. Narrow-screen overflow is covered by
   Chromium tests, but a full DSH Desktop visual test has not been automated.

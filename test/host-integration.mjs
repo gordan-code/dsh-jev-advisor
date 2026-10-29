@@ -127,6 +127,13 @@ test('real DSH Web host mounts Jev routes with isolated config and strict loopba
       assert.equal(getStatus.value.model, 'jev-latest')
       assert.equal(getStatus.value.requireConfirmation, true)
       assert.equal(getStatus.value.redactSensitive, true)
+      assert.equal(getStatus.value.autoAdvise, false)
+      assert.equal(getStatus.value.diagnostics.autoAdvise, false)
+      if (process.env.DSH_TEST_VERSION === '0.2.1-rc.3') {
+        assert.equal(getStatus.value.diagnostics.dshVersion, '0.2.1-rc.3', '诊断必须识别真实 rc.3 宿主解析表')
+        assert.equal(getStatus.value.diagnostics.declarationMatch, 'match')
+      }
+      assert.equal(mock.requests.length, 0, '本地状态与诊断不调用 Jev')
 
       const postStatus = await expectJson(host, '/dsh-jev-advisor/api/status', {
         method: 'POST',
@@ -260,6 +267,7 @@ test('real DSH settings Remote persists volatile card layout across a process re
     assert.ok(namespace, 'settings Remote serves the installed plugin namespace')
     assert.equal(namespace.value.cardDock, '')
     assert.equal(namespace.value.cardCollapsed, false)
+    assert.equal(namespace.value.autoAdvise, false, '升级缺省采用按需')
 
     const binding = {
       requestId: 'layout-restart-request', sessionId: 'layout-restart-session', interactionKey: 'layout-restart-question',
@@ -284,6 +292,15 @@ test('real DSH settings Remote persists volatile card layout across a process re
     assert.equal(advised.value.advice[0].pick.label, 'Fast')
     assert.equal(mock.requests.length, 1, 'only the confirmed advise reached the mock upstream')
 
+    const optedIn = await host.settingsMutate('dsh-jev-advisor', [
+      { op: 'set', path: ['autoAdvise'], value: true },
+    ], updated.revision)
+    assert.equal(optedIn.value.autoAdvise, true)
+    const optedStatus = await expectJson(host, '/dsh-jev-advisor/api/status', { method: 'GET' }, 200)
+    assert.equal(optedStatus.value.autoAdvise, true)
+    assert.equal(optedStatus.value.diagnostics.autoAdvise, true)
+    assert.equal(mock.requests.length, 1, '设置写入与健康检查不请求上游')
+
     // 这里是真实的进程重启，不伪称热重载；重新启动同一个 DSH_HOME/profile，
     // 必须读到已持久化的布局视图。
     await host.stop()
@@ -296,8 +313,10 @@ test('real DSH settings Remote persists volatile card layout across a process re
     assert.equal(restoredNamespace.value.cardCollapsed, true)
     assert.equal(restoredNamespace.user.cardDock, 'right')
     assert.equal(restoredNamespace.user.cardCollapsed, true)
+    assert.equal(restoredNamespace.value.autoAdvise, true, '明确开启的自动模式跨重启保留')
     const status = await expectJson(host, '/dsh-jev-advisor/api/status', { method: 'GET' }, 200)
     assert.equal(status.value.model, 'jev-latest')
+    assert.equal(status.value.autoAdvise, true)
   } finally {
     if (host !== undefined) await host.stop().catch(() => {})
     if (retainedHome !== undefined) await removeHarnessDirectory(retainedHome, retainedPluginLink === undefined ? [] : [retainedPluginLink]).catch(() => {})

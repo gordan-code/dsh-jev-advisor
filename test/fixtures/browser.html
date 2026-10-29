@@ -61,6 +61,7 @@
     endpoint: `${location.origin}/v1/systemone`,
     model: 'jev-latest',
     enabled: true,
+    autoAdvise: true,
     includeTranscript: true,
     requireConfirmation: false,
     redactSensitive: true,
@@ -179,10 +180,11 @@
   }
 
   const registrations = []
+  let pluginCopy = {}
   const ctx = {
     effect(callback) { return callback() ?? (() => {}) },
     locale: {
-      register() { return () => {} },
+      register(_namespace, dictionaries) { pluginCopy = dictionaries.en; return () => {} },
       bind() {
         return (key, params) => {
           const values = {
@@ -271,7 +273,7 @@
             'settings.help': 'Fixture',
             'panel.layoutSaveFailed': 'Layout could not be saved to this profile; kept for this mount only. Adjust it again to retry.',
           }
-          const template = values[key] ?? key
+          const template = values[key] ?? pluginCopy[key] ?? key
           return params === undefined ? template : template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
         }
       },

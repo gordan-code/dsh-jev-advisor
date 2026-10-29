@@ -48,6 +48,7 @@ function harness(t) {
     requests.push({ url, options, respond: (value) => {
       const payload = JSON.parse(options.body)
       const binding = { requestId: payload.requestId, sessionId: payload.sessionId, interactionKey: payload.interactionKey, questions: payload.questions }
+      if (payload.decisionPreference !== undefined) binding.decisionPreference = payload.decisionPreference
       const result = value !== null && typeof value === 'object' && !Array.isArray(value) ? { binding, ...value } : value
       resolve({ ok: true, status: 200, json: async () => ({ ok: true, value: result }) })
     } })
@@ -56,7 +57,8 @@ function harness(t) {
     for (const slot of slots) slot?.cleanup?.()
     globalThis.fetch = originalFetch
   })
-  const snapshot = { status: 'ready', revision: 1, value: { enabled: true } }
+  // 旧生命周期回归显式选择自动模式；新增用例单独覆盖字段缺失的升级默认值。
+  const snapshot = { status: 'ready', revision: 1, value: { enabled: true, autoAdvise: true } }
   const props = {
     t: (key) => key,
     scope: { subscribe: () => () => {}, getSnapshot: () => snapshot },
@@ -79,6 +81,8 @@ function harness(t) {
   }
   return {
     internals, requests, snapshot, render,
+    button: key => find(tree, node => node.type === 'button' && node.props.children.includes(key))?.props,
+    field: key => find(tree, node => node.type === 'textarea' && node.props.placeholder === key)?.props,
 	  unmount() { for (const slot of slots) slot?.cleanup?.() },
     setInteraction(value) { interaction = value },
     body: () => find(tree, (node) => node.type === internals.JevAdviceBody)?.props,
@@ -96,6 +100,81 @@ const value = { advice: [{
   probabilities: [{ index: 0, label: 'A', probability: 0.8 }, { index: 1, label: 'B', probability: 0.2 }],
 }] }
 const interaction = (key, answer = async () => {}, sessionId = 'session-a') => ({ key, sessionId, questions, answer })
+
+test('升级缺省按需，重渲染和偏好首次应用都不请求，显式双击只启动一次', async t => {
+  const h = harness(t)
+  delete h.snapshot.value.autoAdvise
+  h.setInteraction(interaction('manual')); h.render(); h.render()
+  assert.equal(h.requests.length, 0)
+  const input = h.field('panel.preferencePlaceholder')
+  input.onChange({ target: { value: '优先稳定' } }); h.render()
+  h.button('panel.preferenceApplyIdle').onClick(); h.render()
+  assert.equal(h.requests.length, 0)
+  const start = h.button('panel.ask').onClick
+  start(); start(); h.render()
+  assert.equal(h.requests.length, 1)
+  assert.match(h.requests[0].url, /\/advise$/)
+  assert.equal(JSON.parse(h.requests[0].options.body).decisionPreference, '优先稳定')
+  h.requests[0].respond(value); await h.settle()
+  assert.equal(h.body().adoptable, true)
+})
+
+test('按需确认模式点击前无 prepare，点击后仅准备预览', async t => {
+  const h = harness(t)
+  Object.assign(h.snapshot.value, { autoAdvise: false, requireConfirmation: true })
+  h.setInteraction(interaction('confirm')); h.render()
+  assert.equal(h.requests.length, 0)
+  h.button('panel.ask').onClick(); h.render()
+  assert.equal(h.requests.length, 1)
+  assert.match(h.requests[0].url, /\/prepare$/)
+})
+
+test('未询问的 A→B→A 也不能复用第一次 A 捕获的询问事件', t => {
+  const h = harness(t)
+  h.snapshot.value.autoAdvise = false
+  h.setInteraction(interaction('a')); h.render()
+  const oldStart = h.button('panel.ask').onClick
+  h.setInteraction(interaction('b')); h.render()
+  h.setInteraction(interaction('a')); h.render()
+  oldStart(); h.render()
+  assert.equal(h.requests.length, 0)
+  h.button('panel.ask').onClick(); h.render()
+  assert.equal(h.requests.length, 1)
+})
+
+test('按需切换问题和配置取消请求，A→B→A 不恢复授权，陈旧点击也失效', async t => {
+  const h = harness(t)
+  h.snapshot.value.autoAdvise = false
+  h.setInteraction(interaction('a')); h.render()
+  const oldStart = h.button('panel.ask').onClick
+  oldStart(); h.render()
+  h.setInteraction(interaction('b')); h.render()
+  assert.equal(h.requests[0].options.signal.aborted, true)
+  oldStart(); h.render()
+  assert.equal(h.requests.length, 1)
+  h.setInteraction(interaction('a')); h.render()
+  assert.ok(h.button('panel.ask'))
+  assert.equal(h.requests.length, 1)
+  h.button('panel.ask').onClick(); h.render()
+  h.snapshot.value.model = 'changed'; h.snapshot.revision++; h.render()
+  assert.equal(h.requests[1].options.signal.aborted, true)
+  assert.equal(h.requests.length, 2)
+  assert.ok(h.button('panel.ask'))
+})
+
+test('从自动切回按需立即取消，重试显式请求，关闭重开取消的请求不自动续发', async t => {
+  const h = harness(t)
+  h.setInteraction(interaction('switch')); h.render()
+  h.snapshot.value.autoAdvise = false; h.snapshot.revision++; h.render()
+  assert.equal(h.requests[0].options.signal.aborted, true)
+  assert.equal(h.requests.length, 1)
+  h.button('panel.ask').onClick(); h.render()
+  h.close(); h.render()
+  assert.equal(h.requests[1].options.signal.aborted, true)
+  h.button('panel.open').onClick(); h.render()
+  assert.equal(h.requests.length, 2)
+  assert.ok(h.button('panel.ask'))
+})
 
 test('已卸载浮层捕获的采纳事件与已关闭通道都不能提交', async t => {
 	const h = harness(t)

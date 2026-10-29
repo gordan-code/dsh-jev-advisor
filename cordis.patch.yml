@@ -34,6 +34,7 @@
 #         config:
 #           endpoint: https://api.typesafe.ai/v1/systemone
 #           model: jev-latest
+#           autoAdvise: false  # 按需为默认；开启自动获取需设为 true，实际发送可能产生用量。
 #           includeTranscript: true
 #           transcriptMessages: 12
 #           timeoutMs: 30000

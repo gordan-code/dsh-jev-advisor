@@ -50,6 +50,7 @@ export async function createBrowserHarness() {
 				endpoint: 'http://127.0.0.1:1/v1/systemone',
 				model: 'jev-latest',
 				enabled: true,
+				autoAdvise: true,
 				includeTranscript: true,
 				requireConfirmation: false,
 				redactSensitive: true,

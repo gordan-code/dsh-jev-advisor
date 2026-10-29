@@ -5,10 +5,158 @@ import { createBrowserHarness } from './helpers/browser-harness.mjs'
 
 let browser
 
+test('按需缺省在重渲染、偏好保存和会话切换时不请求，显式双击只评估一次', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    await page.evaluate(() => window.__fixture.setConfig({ autoAdvise: undefined }))
+    await mountOverlay(page, [question('manual', 'manual-one', 'Manual')], 'manual')
+    const ask = page.getByRole('button', { name: 'Ask Jev', exact: true })
+    await ask.waitFor()
+    assert.equal(harness.getRecords('prepare').length, 0)
+    assert.equal(harness.getRecords('advise').length, 0)
+    await page.getByPlaceholder(/Tell Jev/).fill('优先稳定')
+    await page.getByRole('button', { name: 'Save preference for this question' }).click()
+    assert.equal(harness.getRecords('advise').length, 0)
+    await ask.evaluate(button => { button.click(); button.click() })
+    await page.getByRole('button', { name: 'Adopt Jev’s answer', exact: true }).waitFor()
+    assert.equal(harness.getRecords('advise').length, 1)
+    assert.equal(harness.getRecords('advise')[0].body.decisionPreference, '优先稳定')
+    await page.evaluate(() => window.__fixture.setConfig({ model: 'changed' }))
+    await ask.waitFor()
+    assert.equal(harness.getRecords('advise').length, 1)
+    await mountOverlay(page, [question('manual', 'manual-two', 'Next')], 'manual')
+    await ask.waitFor()
+    assert.equal(harness.getRecords('advise').length, 1)
+    await page.evaluate(() => { window.__fixture.unmountOverlay(); window.__fixture.mountOverlay() })
+    await ask.waitFor()
+    assert.equal(harness.getRecords('advise').length, 1)
+  })
+})
+
+test('按需与确认组合：先点击准备，再确认发送；关闭已完成卡片重开不重复调用', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    await page.evaluate(() => window.__fixture.setConfig({ autoAdvise: false, requireConfirmation: true }))
+    await mountOverlay(page, [question('confirm', 'manual-confirm', 'Confirm')], 'confirm')
+    await page.getByRole('button', { name: 'Ask Jev', exact: true }).waitFor()
+    assert.equal(harness.getRecords('prepare').length, 0)
+    await page.getByRole('button', { name: 'Ask Jev', exact: true }).click()
+    await page.getByRole('button', { name: 'Confirm and send', exact: true }).waitFor()
+    assert.equal(harness.getRecords('prepare').length, 1)
+    assert.equal(harness.getRecords('advise').length, 0)
+    await page.getByRole('button', { name: 'Confirm and send', exact: true }).click()
+    await page.getByRole('button', { name: 'Adopt Jev’s answer', exact: true }).waitFor()
+    await page.getByTitle('Dismiss', { exact: true }).click()
+    await page.getByRole('button', { name: 'Open Jev advice' }).click()
+    await page.getByRole('button', { name: 'Adopt Jev’s answer', exact: true }).waitFor()
+    assert.equal(harness.getRecords('prepare').length, 1)
+    assert.equal(harness.getRecords('advise').length, 1)
+  })
+})
+
+test('设置开关说明可见且原子保存，诊断只复制白名单且不付费探测', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    harness.setStatus({ diagnostics: { pluginVersion: '0.1.7', dshVersion: '0.2.1-rc.3', declaredDsh: '0.2.1-rc.3', declarationMatch: 'match', enabled: true, autoAdvise: false, hasKey: true, apiKey: 'private-key', endpoint: 'https://user:secret@private', sessionId: 'private-session' } })
+    await page.evaluate(() => {
+      window.__fixture.setConfig({ autoAdvise: false })
+      window.__fixture.mountSettings()
+      window.__diagnosticCopies = []
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__diagnosticCopies.push(text) } } })
+    })
+    const section = page.locator('[data-dsh-jev-advisor="diagnostics"]')
+    await section.getByText('DSH version: 0.2.1-rc.3', { exact: true }).waitFor()
+    assert.ok(await page.getByText(/Off by default, including upgrades/).isVisible())
+    const checkbox = page.getByLabel('Automatically get Jev advice', { exact: true })
+    assert.equal(await checkbox.isChecked(), false)
+    await checkbox.check()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByText('Saved', { exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => window.__fixture.getConfig().autoAdvise), true)
+    const calls = await page.evaluate(() => window.__fixture.getScopeCalls())
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0].ops, [{ op: 'set', path: ['autoAdvise'], value: true }])
+    await section.getByRole('button', { name: 'Copy sanitized diagnostics' }).click()
+    await section.getByText('Diagnostics copied', { exact: true }).waitFor()
+    const copies = await page.evaluate(() => window.__diagnosticCopies)
+    assert.equal(copies.length, 1)
+    assert.equal(/private|secret|apiKey|endpoint|sessionId/.test(copies[0]), false)
+    assert.equal(harness.getRecords('test').length, 0)
+    assert.equal(harness.getRecords('advise').length, 0)
+  })
+})
+
 before(async () => {
 	// The cached Playwright Chromium is used headlessly. No user browser, page,
 	// profile, or desktop surface is touched by this suite.
 	browser = await chromium.launch({ headless: true })
+})
+
+test('按需布局变化不请求，失败后仅显式重试；取消加载后重开仍等待点击', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    await page.evaluate(() => window.__fixture.setConfig({ autoAdvise: false }))
+    await mountOverlay(page, [question('s', 'manual-layout', 'Layout')], 's')
+    const card = page.locator('[data-dsh-jev-advisor="advice"]')
+    await card.getByRole('button', { name: 'Ask Jev', exact: true }).waitFor()
+    await card.getByRole('button', { name: 'Dock right' }).click()
+    await page.waitForFunction(() => window.__fixture.getConfig().cardDock === 'right')
+    assert.equal(harness.getRecords('advise').length, 0)
+    harness.setAdviseMode('error')
+    await card.getByRole('button', { name: 'Ask Jev', exact: true }).click()
+    await card.getByRole('button', { name: 'Retry', exact: true }).waitFor()
+    harness.setAdviseMode('auto')
+    await card.getByRole('button', { name: 'Retry', exact: true }).click()
+    await card.getByText('Layout fast', { exact: true }).waitFor()
+    await card.getByRole('button', { name: 'Dock left' }).click()
+    await page.waitForFunction(() => window.__fixture.getConfig().cardDock === 'left')
+    await card.getByText('Layout fast', { exact: true }).waitFor()
+    assert.equal(harness.getRecords('advise').length, 2)
+    harness.setAdviseMode('manual')
+    await mountOverlay(page, [question('s', 'manual-cancel', 'Cancel')], 's')
+    await card.getByRole('button', { name: 'Ask Jev', exact: true }).click()
+    const request = await harness.waitForAdvise(r => r.body.interactionKey === 'manual-cancel')
+    await card.getByTitle('Dismiss', { exact: true }).click()
+    await harness.waitForResponseClose(request)
+    await page.getByRole('button', { name: 'Open Jev advice' }).click()
+    await card.getByRole('button', { name: 'Ask Jev', exact: true }).waitFor()
+    assert.equal(harness.getRecords('advise').length, 3)
+  })
+})
+
+test('切回按需取消自动请求，迟到响应不恢复；再次开启自动仅请求当前问题', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    harness.setAdviseMode('manual')
+    await mountOverlay(page, [question('s', 'mode-switch', 'Switch')], 's')
+    const first = await harness.waitForAdvise()
+    await page.evaluate(() => window.__fixture.setConfig({ autoAdvise: false }))
+    await page.getByRole('button', { name: 'Ask Jev', exact: true }).waitFor()
+    await harness.waitForResponseClose(first)
+    assert.equal(harness.getRecords('advise').length, 1)
+    harness.setAdviseMode('auto')
+    await page.evaluate(() => window.__fixture.setConfig({ autoAdvise: true }))
+    await page.getByRole('button', { name: 'Adopt Jev’s answer', exact: true }).waitFor()
+    assert.equal(harness.getRecords('advise').length, 2)
+  })
+})
+
+test('诊断缺失显示未知，复制拒绝不泄露异常，卸载后迟到复制不更新新面板', async t => {
+  await withBrowser(t, async ({ page, harness }) => {
+    await page.evaluate(() => {
+      window.__fixture.mountSettings()
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw Error('private-key') } } })
+    })
+    let section = page.locator('[data-dsh-jev-advisor="diagnostics"]')
+    await section.getByText('DSH version: Unknown', { exact: true }).waitFor()
+    await section.getByRole('button', { name: 'Copy sanitized diagnostics' }).click()
+    await section.getByText(/Could not copy diagnostics/).waitFor()
+    assert.equal(await section.getByText('private-key').count(), 0)
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = () => new Promise(resolve => { window.__finishDiagnosticCopy = resolve })
+    })
+    await section.getByRole('button', { name: 'Copy sanitized diagnostics' }).click()
+    await page.evaluate(() => { window.__fixture.unmountSettings(); window.__fixture.mountSettings(); window.__finishDiagnosticCopy() })
+    section = page.locator('[data-dsh-jev-advisor="diagnostics"]')
+    await section.getByRole('button', { name: 'Copy sanitized diagnostics' }).waitFor()
+    assert.equal(await section.getByText('Diagnostics copied', { exact: true }).count(), 0)
+    assert.equal(harness.getRecords('test').length, 0)
+  })
 })
 
 after(async () => {
@@ -350,7 +498,7 @@ test('settings save validates the full draft and commits one atomic mutate', asy
 		await settings.getByLabel('Mask common credentials before sending').uncheck()
 		assert.equal(await settings.getByText('Not all sensitive information can be detected', { exact: true }).count(), 1)
 		await settings.getByRole('button', { name: 'Save' }).click()
-		await settings.getByText('Saved').waitFor({ state: 'visible' })
+		await settings.getByText('Saved', { exact: true }).waitFor({ state: 'visible' })
 
 		const calls = await page.evaluate(() => window.__fixture.getScopeCalls())
 		assert.equal(calls.length, 1)
@@ -367,7 +515,7 @@ test('settings save validates the full draft and commits one atomic mutate', asy
 		])
 		assert.deepEqual(await page.evaluate(() => window.__fixture.getConfig()), {
 			apiKey: 'sk-fixture', endpoint: 'https://fixture.example/v1', model: 'jev-browser', enabled: false,
-			includeTranscript: true, requireConfirmation: true, redactSensitive: false, transcriptMessages: 7, timeoutMs: 45000,
+			autoAdvise: true, includeTranscript: true, requireConfirmation: true, redactSensitive: false, transcriptMessages: 7, timeoutMs: 45000,
 			cardDock: '', cardCollapsed: false,
 		})
 	})

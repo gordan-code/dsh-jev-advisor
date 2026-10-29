@@ -17,6 +17,7 @@ export declare const Config: Schema<{
   endpoint: string
   model: string
   enabled: boolean
+  autoAdvise: boolean
   includeTranscript: boolean
   requireConfirmation: boolean
   redactSensitive: boolean
@@ -25,6 +26,24 @@ export declare const Config: Schema<{
   cardDock: '' | 'left' | 'right'
   cardCollapsed: boolean
 }>
+
+/** Local allowlisted diagnostic facts; a declaration match is not a functional guarantee. */
+export interface JevDiagnostics {
+  pluginVersion: string | null
+  dshVersion: string | null
+  declaredDsh: string | null
+  declarationMatch: 'match' | 'mismatch' | 'unknown'
+  enabled: boolean
+  autoAdvise: boolean
+  hasKey: boolean
+  requireConfirmation: boolean
+  redactSensitive: boolean
+  includeTranscript: boolean
+}
+export declare function diagnosticsOf(ctx: Pick<Context, 'get'>, settings?: {
+  enabled?: boolean; autoAdvise?: boolean; apiKey?: string; requireConfirmation?: boolean
+  redactSensitive?: boolean; includeTranscript?: boolean
+}): JevDiagnostics
 
 /** One pending question, normalized for Jev. */
 export interface JevQuestion {

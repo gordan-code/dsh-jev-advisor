@@ -28,6 +28,7 @@ import z from '@deepseek-ai/schemastery'
 import { isIP } from 'node:net'
 import { createHash, randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
+import { readFileSync } from 'node:fs'
 
 /** Plugin identity for cordis rows and diagnostics. */
 export const name = 'dsh-jev-advisor'
@@ -69,6 +70,7 @@ export const Config = z.object({
   endpoint: z.string().default(DEFAULT_ENDPOINT).volatile(),
   model: z.string().default(DEFAULT_MODEL).volatile(),
   enabled: z.boolean().default(true).volatile(),
+  autoAdvise: z.boolean().default(false).volatile(),
   includeTranscript: z.boolean().default(true).volatile(),
   requireConfirmation: z.boolean().default(false).volatile(),
   redactSensitive: z.boolean().default(true).volatile(),
@@ -78,6 +80,31 @@ export const Config = z.object({
   cardDock: z.union(['', 'left', 'right']).default('').volatile(),
   cardCollapsed: z.boolean().default(false).volatile(),
 })
+
+// 随实际安装包读取，不从 PATH、开发依赖或用户目录猜测宿主版本。
+const pluginManifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+const exactVersion = value => typeof value === 'string' && value.length <= 100
+  && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(value) ? value : null
+
+/** 本地诊断严格白名单；仅解释本包的精确版本声明，不保证实际功能兼容。 */
+export function diagnosticsOf(ctx, settings = {}) {
+  let dshVersion = null
+  try {
+    const entries = ctx.get?.('pluginPackages')?.resolution?.entries
+    if (Array.isArray(entries)) dshVersion = exactVersion(entries.find(entry => entry?.scope === 'installation' && entry.name === '@deepseek-ai/dsh-app-boot')?.version)
+  } catch { /* 宿主未提供可信解析表时保持未知，不输出异常内容。 */ }
+  const declaredDsh = typeof pluginManifest.engines?.dsh === 'string' ? pluginManifest.engines.dsh : null
+  const versions = declaredDsh?.split('||').map(value => exactVersion(value.trim()))
+  const declarationMatch = dshVersion === null || !versions?.length || versions.some(value => value === null)
+    ? 'unknown' : versions.some(value => value.split('+')[0] === dshVersion.split('+')[0]) ? 'match' : 'mismatch'
+  return {
+    pluginVersion: exactVersion(pluginManifest.version), dshVersion, declaredDsh, declarationMatch,
+    enabled: settings.enabled !== false, autoAdvise: settings.autoAdvise === true,
+    hasKey: typeof settings.apiKey === 'string' && settings.apiKey.trim() !== '',
+    requireConfirmation: settings.requireConfirmation === true,
+    redactSensitive: settings.redactSensitive !== false, includeTranscript: settings.includeTranscript !== false,
+  }
+}
 
 /** Failure with a stable code, surfaced verbatim to the browser half. */
 class JevError extends Error {
@@ -965,6 +992,7 @@ export function apply(ctx, config) {
       endpoint: read(config?.endpoint, DEFAULT_ENDPOINT),
       model: read(config?.model, DEFAULT_MODEL),
       enabled: read(config?.enabled, true),
+      autoAdvise: read(config?.autoAdvise, false),
       includeTranscript: read(config?.includeTranscript, true),
       requireConfirmation: read(config?.requireConfirmation, false),
       redactSensitive: read(config?.redactSensitive, true),
@@ -976,6 +1004,7 @@ export function apply(ctx, config) {
       endpoint: typeof value.endpoint === 'string' && value.endpoint.trim() !== '' ? value.endpoint.trim() : DEFAULT_ENDPOINT,
       model: typeof value.model === 'string' && value.model.trim() !== '' ? value.model.trim() : DEFAULT_MODEL,
       enabled: value.enabled !== false,
+      autoAdvise: value.autoAdvise === true,
       includeTranscript: value.includeTranscript !== false,
       requireConfirmation: value.requireConfirmation === true,
       redactSensitive: value.redactSensitive !== false,
@@ -1028,6 +1057,8 @@ export function apply(ctx, config) {
       ok: true,
       value: {
         enabled: settings.enabled,
+        autoAdvise: settings.autoAdvise,
+        diagnostics: diagnosticsOf(ctx, settings),
         hasKey: settings.apiKey.trim() !== '',
         endpoint: publicEndpoint(settings.endpoint),
         model: settings.model,

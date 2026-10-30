@@ -3,6 +3,18 @@ import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { qualitySteps, runQuality } from '../scripts/quality.mjs'
 
+test('浏览器质量任务固定 Playwright 支持的 Ubuntu 24.04，不跟随 latest 漂移', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  const lines = workflow.replace(/\r\n/g, '\n').split('\n')
+  const start = lines.indexOf('  quality:')
+  assert.notEqual(start, -1, 'quality job exists')
+  const next = lines.findIndex((line, index) => index > start && /^  \S/.test(line))
+  const quality = lines.slice(start + 1, next === -1 ? undefined : next)
+  assert.equal(quality.find((line) => line.startsWith('    runs-on:')), '    runs-on: ubuntu-24.04')
+  assert.ok(quality.includes('      - run: npx playwright install --with-deps chromium'))
+  assert.ok(quality.includes('      - run: npm run quality'))
+})
+
 test('0.1.7 仅声明已验证的 DSH 候选版本，并同步锁文件版本', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'))

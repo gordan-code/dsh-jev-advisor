@@ -36,7 +36,8 @@ jobs:
 
   quality:
     name: release quality and isolated tarball install (node 24, DSH ${{ matrix.dsh }})
-    runs-on: ubuntu-latest
+    # Playwright 1.59.1 不支持 Ubuntu 26.04，避免 latest 镜像升级破坏浏览器安装。
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

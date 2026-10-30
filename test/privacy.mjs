@@ -74,8 +74,12 @@ async function fixture(t, config = {}) {
   const cleanups = []
   const settings = { apiKey: ACCEPTED_KEY, endpoint: upstream.url, ...config }
   let transcript = ''
+  let events = []
   product.apply({
-    get: (name) => name === 'sessions' ? { get: () => ({ deriveMessages: () => [{ role: 'user', content: transcript }] }) } : undefined,
+    get: (name) => name === 'sessions' ? { get: () => ({
+      deriveMessages: () => [{ role: 'user', content: transcript }],
+      snapshotEvents: () => events,
+    }) } : undefined,
     inject: () => {},
     effect: (callback) => { const cleanup = callback(); if (typeof cleanup === 'function') cleanups.push(cleanup) },
     webServer: { register: ({ path, handler }) => { routes.set(path, handler); return () => {} } },
@@ -93,7 +97,7 @@ async function fixture(t, config = {}) {
     await upstream.close()
   })
   const origin = `http://127.0.0.1:${server.address().port}`
-  return { upstream, settings, setTranscript: (value) => { transcript = value }, async post(route, body) {
+  return { upstream, settings, setTranscript: (value) => { transcript = value }, setEvents: (value) => { events = value }, async post(route, body) {
     const response = await fetch(`${origin}/dsh-jev-advisor/api/${route}`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })
     return { status: response.status, body: await response.json() }
   } }
@@ -284,3 +288,32 @@ test('浏览器断连后宿主向仍在等待的上游传播取消', async () =>
     assert.equal(pending.response.value, undefined)
   } finally { f.close(); globalThis.fetch = originalFetch }
 })
+
+test('越权审批关联的 tool/call 参数进入 state.approval 并执行凭证脱敏与绑定校验', async (t) => {
+  const f = await fixture(t, { requireConfirmation: true })
+  f.setEvents([
+    { type: 'tool/call', data: { callId: 'call-99', name: 'bash', arguments: '{"cmd":"curl https://admin:supersecret@example.com"}' } },
+  ])
+  const approvalReq = {
+    ...binding,
+    approval: { toolName: 'bash', callId: 'call-99', reason: 'token=my-secret-token' },
+    comparePerspectives: true,
+    questions: [{
+      id: 'approval',
+      question: 'Allow bash?',
+      approval: true,
+      multiSelect: false,
+      options: [{ label: 'allow-once' }, { label: 'reject' }],
+    }],
+  }
+  const preview = await f.post('prepare', approvalReq)
+  assert.equal(preview.status, 200)
+  assert.deepEqual(preview.body.value.binding, approvalReq)
+  const wire = JSON.stringify(preview.body.value.request)
+  assert.doesNotMatch(wire, /supersecret|my-secret-token/)
+  assert.equal(preview.body.value.request.state.approval.toolName, 'bash')
+  assert.match(preview.body.value.request.state.approval.arguments, /\[REDACTED\]/)
+  assert.ok(preview.body.value.request.questions.decision_0_risk)
+  assert.ok(preview.body.value.request.questions.decision_0_perspective_stable)
+})
+

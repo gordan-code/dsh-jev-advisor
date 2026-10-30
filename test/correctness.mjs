@@ -108,3 +108,103 @@ for (const values of [[0, 0, 0], [0.8, 0.8, 0.8], [0.1, 0.1, 0.1], [0, 1, 0]]) {
     assert.equal(mapAdvice(built.plan, response)[0].answered, false)
   })
 }
+
+test('comparePerspectives fans out three perspective choice questions in one request and maps consistent or split picks', () => {
+  const built = buildJevRequest([choice('arch')], 'ctx', { comparePerspectives: true })
+  assert.ok(built.questions.decision_0)
+  assert.ok(built.questions.decision_0_perspective_stable)
+  assert.ok(built.questions.decision_0_perspective_fast)
+  assert.ok(built.questions.decision_0_perspective_minimal)
+  const response = choiceResponse(built)
+  response.answers.decision_0_perspective_stable = {
+    type: 'choice', choice: 'opt_0',
+    probabilities: { opt_0: 0.9, opt_1: 0.05, __none_of_the_above__: 0.05 }, confidence: 0.85,
+  }
+  response.answers.decision_0_perspective_fast = {
+    type: 'choice', choice: 'opt_1',
+    probabilities: { opt_0: 0.2, opt_1: 0.75, __none_of_the_above__: 0.05 }, confidence: 0.7,
+  }
+  response.answers.decision_0_perspective_minimal = {
+    type: 'choice', choice: 'opt_0',
+    probabilities: { opt_0: 0.8, opt_1: 0.1, __none_of_the_above__: 0.1 }, confidence: 0.75,
+  }
+  const mapped = mapAdvice(built.plan, response)[0]
+  assert.equal(mapped.answered, true)
+  assert.equal(Array.isArray(mapped.perspectives), true)
+  assert.equal(mapped.perspectives.length, 3)
+  assert.deepEqual(mapped.perspectives.map((item) => [item.id, item.pick?.label]), [
+    ['stable', 'A'],
+    ['fast', 'B'],
+    ['minimal', 'A'],
+  ])
+})
+
+test('custom dynamic perspectives (1 to 5 items) fan out with custom labels and reject invalid perspective counts', () => {
+  const built = buildJevRequest([choice('sec')], 'ctx', {
+    comparePerspectives: true,
+    perspectives: [
+      { id: 'security', label: 'Security & blast radius', prompt: 'prioritize security boundaries' },
+      'Zero external dependencies',
+    ],
+  })
+  assert.ok(built.questions.decision_0_perspective_security)
+  assert.ok(built.questions.decision_0_perspective_p_1)
+  assert.equal(Object.keys(built.questions).length, 3)
+  const response = choiceResponse(built)
+  response.answers.decision_0_perspective_security = {
+    type: 'choice', choice: 'opt_1',
+    probabilities: { opt_0: 0.1, opt_1: 0.85, __none_of_the_above__: 0.05 }, confidence: 0.9,
+  }
+  response.answers.decision_0_perspective_p_1 = {
+    type: 'choice', choice: 'opt_0',
+    probabilities: { opt_0: 0.8, opt_1: 0.1, __none_of_the_above__: 0.1 }, confidence: 0.8,
+  }
+  const mapped = mapAdvice(built.plan, response)[0]
+  assert.deepEqual(mapped.perspectives.map((item) => [item.id, item.label, item.pick?.label]), [
+    ['security', 'Security & blast radius', 'B'],
+    ['p_1', 'Zero external dependencies', 'A'],
+  ])
+  assert.throws(
+    () => buildJevRequest([choice('sec')], 'ctx', { comparePerspectives: true, perspectives: [] }),
+    /1 to 5 items/,
+  )
+  assert.throws(
+    () => buildJevRequest([choice('sec')], 'ctx', { comparePerspectives: true, perspectives: ['1', '2', '3', '4', '5', '6'] }),
+    /1 to 5 items/,
+  )
+})
+
+test('approval and planReview questions attach auxiliary score evaluations without blocking choice mapping', () => {
+  const approvalQ = { ...choice('approval'), approval: true, options: [{ label: 'allow-once' }, { label: 'reject' }] }
+  const planQ = { ...choice('plan'), planReview: true, detail: 'Step 1\nStep 2', options: [{ label: 'Approve' }] }
+  const built = buildJevRequest([approvalQ, planQ], 'ctx')
+  assert.equal(built.questions.decision_0_risk?.type, 'score')
+  assert.equal(Array.isArray(built.questions.decision_0_risk?.criteria), true)
+  assert.equal(built.questions.decision_0_risk?.criteria.length, 3)
+  assert.equal(built.questions.decision_0_risk?.legend, undefined)
+  assert.equal(built.questions.decision_1_plan_score?.type, 'score')
+  assert.equal(Array.isArray(built.questions.decision_1_plan_score?.criteria), true)
+  assert.equal(built.questions.decision_1_plan_score?.criteria.length, 3)
+  const answers = {
+    decision_0: {
+      type: 'choice', choice: 'opt_1',
+      probabilities: { opt_0: 0.1, opt_1: 0.85, __none_of_the_above__: 0.05 }, confidence: 0.9,
+    },
+    decision_0_risk: {
+      type: 'score', score: 1.75, probabilities: { 0: 0.05, 1: 0.15, 2: 0.8 }, confidence: 0.88,
+    },
+    decision_1: {
+      type: 'choice', choice: '__none_of_the_above__',
+      probabilities: { opt_0: 0.2, __none_of_the_above__: 0.8 }, confidence: 0.75,
+    },
+    decision_1_plan_score: {
+      type: 'score', score: 0.2, probabilities: { 0: 0.8, 1: 0.2, 2: 0 }, confidence: 0.72,
+    },
+  }
+  const mapped = mapAdvice(built.plan, { answers })
+  assert.equal(mapped[0].pick?.label, 'reject')
+  assert.deepEqual(mapped[0].riskScore, { score: 2, confidence: 0.88 })
+  assert.equal(mapped[1].noneOfTheAbove, true)
+  assert.deepEqual(mapped[1].planScore, { score: 0, confidence: 0.72 })
+})
+

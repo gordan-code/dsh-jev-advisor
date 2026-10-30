@@ -88,6 +88,20 @@ export function createMockTypeSafeServer(options = {}) {
     requests.push({ headers: { ...request.headers }, body })
     if (dumpPath !== undefined) writeFileSync(dumpPath, JSON.stringify(body, null, 2), 'utf8')
 
+    // Mirror upstream: a `score` question must carry a `criteria` ARRAY of labels.
+    for (const [id, question] of Object.entries(body.questions ?? {})) {
+      if (question?.type === 'score' && !Array.isArray(question.criteria)) {
+        send(422, {
+          detail: [{
+            type: 'missing',
+            loc: ['body', 'questions', id, 'score', 'criteria'],
+            msg: 'Field required',
+          }],
+        })
+        return
+      }
+    }
+
     const answers = {}
     for (const [id, question] of Object.entries(body.questions ?? {})) {
       const answer = answerFor(id, question)

@@ -134,6 +134,7 @@
   }
 
   const calls = []
+  const timerCalls = []
   const answerPlans = new Map()
   const interactions = new Map()
   const interactionStates = new Map()
@@ -142,6 +143,23 @@
     const sessionId = String(spec.sessionId)
     const key = String(spec.interactionKey ?? `${sessionId}:question`)
     if (spec.kind === 'approval') {
+      if (typeof spec.toolName === 'string') {
+        let answerable = spec.answerable !== false
+        return {
+          sessionId,
+          key,
+          kind: 'approval',
+          toolName: spec.toolName,
+          callId: spec.callId,
+          reason: spec.reason,
+          get answerable() { return answerable },
+          answer(outcome) {
+            calls.push({ sessionId, interactionKey: key, payload: outcome })
+            answerable = false
+            return Promise.resolve()
+          },
+        }
+      }
       return { sessionId, key, kind: 'approval', questions: [] }
     }
     const sourceQuestions = Array.isArray(spec.questions) && spec.questions.length > 0 ? spec.questions : [spec]
@@ -152,15 +170,23 @@
         question: String(questionSpec.question ?? questionSpec.label ?? spec.question ?? sessionId),
         header: typeof questionSpec.header === 'string' ? questionSpec.header : undefined,
         detail: typeof questionSpec.detail === 'string' ? questionSpec.detail : undefined,
+        intent: questionSpec.intent,
         multiSelect: questionSpec.multiSelect === true,
         options: labels.map((label) => typeof label === 'object' && label !== null
           ? { label: String(label.label), description: typeof label.description === 'string' ? label.description : undefined }
           : { label: String(label) }),
       }
     })
+    const state = store({
+      closed: spec.closed === true,
+      channel: spec.channel ?? 'waterfall',
+      state: 'open',
+      ...(spec.timed === true ? { countdown: { remainingMs: 12000, running: true } } : {}),
+    })
     const interaction = {
       sessionId,
       key,
+      ...(typeof spec.kind === 'string' ? { kind: spec.kind } : {}),
       questions: normalizedQuestions,
       ...(spec.review === true ? { review: [] } : {}),
       answer(payload) {
@@ -170,8 +196,23 @@
         if (next === 'reject') return Promise.reject(new Error('fixture answer failed'))
         return Promise.resolve()
       },
+      dismiss() {
+        calls.push({ sessionId, interactionKey: key, dismissed: true })
+        return Promise.resolve()
+      },
+      takeTime() {
+        timerCalls.push({ sessionId, interactionKey: key, action: 'takeTime' })
+        if (spec.timed === true) {
+          state.set({ ...state.getSnapshot(), countdown: { remainingMs: 12000, running: false } })
+        }
+      },
+      holdFocus() {
+        timerCalls.push({ sessionId, interactionKey: key, action: 'holdFocus' })
+      },
+      releaseFocus() {
+        timerCalls.push({ sessionId, interactionKey: key, action: 'releaseFocus' })
+      },
     }
-    const state = store({ closed: spec.closed === true, channel: spec.channel ?? 'waterfall', state: 'open' })
     interaction.getSnapshot = state.getSnapshot
     interaction.subscribe = state.subscribe
     interactionStates.set(key, state)
@@ -386,6 +427,7 @@
     resetScopeCalls() { config.calls.splice(0) },
     getConfig() { return deepCopy(config.value) },
     getAnswerCalls() { return deepCopy(calls) },
+    getTimerCalls() { return deepCopy(timerCalls) },
   }
 
   render('overlay')

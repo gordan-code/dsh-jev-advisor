@@ -1047,3 +1047,82 @@ test('来源不明的布局修订仍使旧建议失效，不能误判隐藏 Key 
 		assert.equal(harness.getRecords('advise').length, 2)
 	})
 })
+
+test('四大新增卖点浏览器端闭环：越权审批采纳、限时提问防超时、多视角取舍对比与 Plan Review 要求修改', async t => {
+	await withBrowser(t, async ({ page, harness }) => {
+		harness.setAdviseMode('auto')
+		harness.setAdviceOverride((questions) => questions.map((item) => ({
+			questionId: item.id,
+			kind: 'choice',
+			supported: true,
+			answered: true,
+			pick: item.planReview ? undefined : { index: 1, label: item.options[1]?.label ?? item.options[0].label, probability: 0.85 },
+			noneOfTheAbove: Boolean(item.planReview),
+			noneProbability: item.planReview ? 0.85 : 0.05,
+			confidence: 0.9,
+			...(item.approval ? { riskScore: { score: 2, confidence: 0.9 } } : {}),
+			...(item.planReview ? { planScore: { score: 0, confidence: 0.85 } } : {}),
+			perspectives: [
+				{ id: 'stable', pick: { index: 0, label: item.options[0].label, probability: 0.8 }, noneOfTheAbove: false, noneProbability: 0.1 },
+				{ id: 'fast', pick: { index: 1, label: item.options[1]?.label ?? item.options[0].label, probability: 0.9 }, noneOfTheAbove: false, noneProbability: 0.05 },
+				{ id: 'minimal', pick: { index: 0, label: item.options[0].label, probability: 0.75 }, noneOfTheAbove: false, noneProbability: 0.1 },
+			],
+			probabilities: item.options.map((opt, idx) => ({
+				index: idx,
+				label: opt.label,
+				probability: item.planReview ? 0.15 : idx === 1 ? 0.85 : 0.1,
+			})),
+		})))
+
+		await mountOverlay(page, [{
+			sessionId: 's',
+			interactionKey: 'approval-1',
+			kind: 'approval',
+			toolName: 'bash',
+			callId: 'call-9',
+			reason: 'Run privileged script',
+		}], 's')
+		const card = page.locator('[data-dsh-jev-advisor="advice"]')
+		await card.getByText('Risk rating: High risk (2/2)').waitFor()
+		await card.getByText('Trade-off perspectives', { exact: true }).waitFor()
+		await card.getByLabel('Compare trade-off perspectives in one request (adaptive / 1–5 customizable)').check()
+		const editor = card.locator('[data-dsh-jev-advisor="perspectives-editor"]')
+		await editor.waitFor()
+		assert.deepEqual(
+			await editor.locator('[data-dsh-jev-advisor="perspectives-active"] > span > span').allTextContents(),
+			['Security & blast radius', 'Unblock task progress'],
+			'approval question adapts to 2 security/progress perspectives instead of 3 hardcoded code perspectives',
+		)
+		await editor.getByPlaceholder('Custom perspective (e.g. Zero new deps)').fill('Audit trail compliance')
+		await editor.getByRole('button', { name: 'Add perspective' }).click()
+		await editor.getByRole('button', { name: 'Compare selected perspectives' }).click()
+		assert.deepEqual(
+			harness.getRecords('advise').at(-1).body.perspectives.map((item) => item.label),
+			['Security & blast radius', 'Unblock task progress', 'Audit trail compliance'],
+		)
+		await card.getByRole('button', { name: 'Adopt: Reject' }).click()
+		const approvalCalls = await page.evaluate(() => window.__fixture.getAnswerCalls())
+		assert.deepEqual(approvalCalls.at(-1), { sessionId: 's', interactionKey: 'approval-1', payload: 'rejected' })
+
+		await page.evaluate(() => window.__fixture.setSessions([{
+			sessionId: 's',
+			interactionKey: 'plan-1',
+			kind: 'plan-review',
+			timed: true,
+			questions: [{
+				id: 'plan',
+				question: 'Approve deployment plan?',
+				detail: '# Plan\n1. Drop production table',
+				intent: { kind: 'plan-review', approve: 'Approve' },
+				options: ['Approve'],
+			}],
+		}]))
+		await card.getByText('Auto-skip timer paused').waitFor()
+		await card.getByText('Plan readiness: Major gaps or risks (0/2)').waitFor()
+		await card.getByRole('button', { name: 'Adopt: Request changes' }).click()
+		const timerCalls = await page.evaluate(() => window.__fixture.getTimerCalls())
+		const planCalls = await page.evaluate(() => window.__fixture.getAnswerCalls())
+		assert.ok(timerCalls.some((c) => c.interactionKey === 'plan-1' && c.action === 'takeTime'))
+		assert.deepEqual(planCalls.at(-1), { sessionId: 's', interactionKey: 'plan-1', dismissed: true })
+	})
+})

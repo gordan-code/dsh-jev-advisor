@@ -330,4 +330,134 @@ const busyMarkup = renderToStaticMarkup(
 assert.match(busyMarkup, /Submitting…/)
 assert.match(busyMarkup, /Adopt failed: boom/)
 
+const splitPerspectivesMarkup = renderToStaticMarkup(
+	React.createElement(internals.JevAdviceBody, {
+		t,
+		questions: narrowed.questions,
+		value: {
+			...bodyValue,
+			advice: [{
+				...choiceAdvice[0],
+				perspectives: [
+					{ id: 'stable', pick: { index: 1, label: 'Thorough', probability: 0.85 }, noneOfTheAbove: false, noneProbability: 0.05 },
+					{ id: 'fast', pick: { index: 0, label: 'Fast (Recommended)', probability: 0.9 }, noneOfTheAbove: false, noneProbability: 0.02 },
+					{ id: 'minimal', pick: { index: 0, label: 'Fast (Recommended)', probability: 0.75 }, noneOfTheAbove: false, noneProbability: 0.05 },
+				],
+			}],
+		},
+		adoptable: true,
+		busy: false,
+		adoptError: undefined,
+		onAdopt: () => {},
+	}),
+)
+assert.match(splitPerspectivesMarkup, /Trade-off perspectives/)
+assert.match(splitPerspectivesMarkup, /Prefer stability/)
+assert.match(splitPerspectivesMarkup, /Thorough \(85%\)/)
+
+const consistentPerspectivesMarkup = renderToStaticMarkup(
+	React.createElement(internals.JevAdviceBody, {
+		t,
+		questions: narrowed.questions,
+		value: {
+			...bodyValue,
+			advice: [{
+				...choiceAdvice[0],
+				perspectives: [
+					{ id: 'stable', pick: { index: 0, label: 'Fast (Recommended)', probability: 0.8 }, noneOfTheAbove: false, noneProbability: 0.05 },
+					{ id: 'fast', pick: { index: 0, label: 'Fast (Recommended)', probability: 0.9 }, noneOfTheAbove: false, noneProbability: 0.02 },
+					{ id: 'minimal', pick: { index: 0, label: 'Fast (Recommended)', probability: 0.75 }, noneOfTheAbove: false, noneProbability: 0.05 },
+				],
+			}],
+		},
+		adoptable: true,
+		busy: false,
+		adoptError: undefined,
+		onAdopt: () => {},
+	}),
+)
+assert.match(consistentPerspectivesMarkup, /All 3 perspectives agree on this option/)
+
+const approvalPerspectives = internals.defaultPerspectivesFor(
+	{ kind: 'approval', questions: [{ id: 'approval', question: 'Approve bash?', approval: true }] },
+	'',
+	t,
+)
+assert.deepEqual(approvalPerspectives.map((item) => item.id), ['security', 'progress'], 'tool approvals default to 2 security/progress perspectives')
+
+const planPerspectives = internals.defaultPerspectivesFor(
+	{ questions: [{ id: 'plan', question: 'Approve plan?', planReview: true }] },
+	'',
+	t,
+)
+assert.deepEqual(planPerspectives.map((item) => item.id), ['completeness', 'minimal', 'fast'], 'plan review defaults to 3 completeness/minimal/fast perspectives')
+
+const archPerspectives = internals.defaultPerspectivesFor(
+	{ questions: [{ id: 'arch', question: 'Which plugin SDK architecture should we use?' }] },
+	'',
+	t,
+)
+assert.deepEqual(archPerspectives.map((item) => item.id), ['stable', 'extensibility', 'minimal', 'fast'], 'architecture questions default to 4 perspectives')
+
+const customPerspectives = internals.defaultPerspectivesFor(
+	{ questions: [{ id: 'q', question: 'Any question' }] },
+	'Zero new deps, Backward compatibility',
+	t,
+)
+assert.deepEqual(customPerspectives.map((item) => item.label), ['Zero new deps', 'Backward compatibility'], 'settings customPerspectives overrides question-adaptive defaults')
+
+const approvalBodyMarkup = renderToStaticMarkup(
+	React.createElement(internals.JevAdviceBody, {
+		t,
+		questions: [{ id: 'approval', question: 'Approve bash?', approval: true, multiSelect: false, options: [{ label: 'allow-once' }, { label: 'reject' }] }],
+		value: {
+			...bodyValue,
+			advice: [{
+				questionId: 'approval',
+				kind: 'choice',
+				supported: true,
+				answered: true,
+				pick: { index: 1, label: 'reject', probability: 0.88 },
+				noneOfTheAbove: false,
+				noneProbability: 0.02,
+				riskScore: { score: 2, confidence: 0.9 },
+				probabilities: [{ index: 0, label: 'allow-once', probability: 0.1 }, { index: 1, label: 'reject', probability: 0.88 }],
+			}],
+		},
+		adoptable: true,
+		busy: false,
+		adoptError: undefined,
+		onAdopt: () => {},
+	}),
+)
+assert.match(approvalBodyMarkup, /High risk \(2\/2\)/)
+assert.match(approvalBodyMarkup, /Adopt: Reject/)
+
+const planDismissMarkup = renderToStaticMarkup(
+	React.createElement(internals.JevAdviceBody, {
+		t,
+		questions: [{ id: 'plan', question: 'Approve plan?', planReview: true, multiSelect: false, options: [{ label: 'Approve' }] }],
+		value: {
+			...bodyValue,
+			advice: [{
+				questionId: 'plan',
+				kind: 'choice',
+				supported: true,
+				answered: true,
+				pick: undefined,
+				noneOfTheAbove: true,
+				noneProbability: 0.85,
+				planScore: { score: 0, confidence: 0.8 },
+				probabilities: [{ index: 0, label: 'Approve', probability: 0.15 }],
+			}],
+		},
+		adoptable: true,
+		busy: false,
+		adoptError: undefined,
+		onAdopt: () => {},
+	}),
+)
+assert.match(planDismissMarkup, /Major gaps or risks \(0\/2\)/)
+assert.match(planDismissMarkup, /Adopt: Request changes/)
+
 process.stdout.write('dsh-jev-advisor client: all assertions passed\n')

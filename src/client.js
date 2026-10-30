@@ -81,6 +81,36 @@ window.__ModuleLoader__.load({
 			'panel.preferenceStable': '优先稳定',
 			'panel.preferenceFast': '尽快完成',
 			'panel.preferenceMinimal': '尽量少改代码',
+			'panel.comparePerspectives': '单次请求多视角取舍对比（按问题自适应 / 可自定义 1~5 个视角）',
+			'panel.perspectivesTitle': '多视角取舍对比',
+			'panel.perspectivesConsistent': '{count} 个视角一致推荐该项',
+			'panel.perspective.stable': '优先稳定',
+			'panel.perspective.fast': '尽快完成',
+			'panel.perspective.minimal': '尽量少改代码',
+			'panel.perspective.security': '安全与最小影响',
+			'panel.perspective.progress': '推进当前任务',
+			'panel.perspective.completeness': '方案完备与边界覆盖',
+			'panel.perspective.ux': '用户体验与交互清晰',
+			'panel.perspective.extensibility': '长期可扩展性',
+			'panel.perspectivesEditorTitle': '当前对比视角（1~5 个，按问题类型自动匹配，可增删）',
+			'panel.perspectiveQuickAdd': '快捷添加：',
+			'panel.perspectiveCustomPlaceholder': '输入自定义视角（如：零外部依赖）',
+			'panel.perspectiveAdd': '添加视角',
+			'panel.perspectiveApply': '按所选视角重新对比',
+			'panel.perspectiveApplyIdle': '保存所选视角',
+			'panel.perspectiveRemove': '移除视角 {label}',
+			'panel.riskScore.0': '风险评估：低风险 (0/2)',
+			'panel.riskScore.1': '风险评估：中风险 (1/2)',
+			'panel.riskScore.2': '风险评估：高风险 (2/2)',
+			'panel.planScore.0': '计划完整度：存在明显缺口或风险 (0/2)',
+			'panel.planScore.1': '计划完整度：基本可行但有待完善 (1/2)',
+			'panel.planScore.2': '计划完整度：完备可行 (2/2)',
+			'panel.adoptAllowOnce': '采纳：允许本次执行',
+			'panel.adoptReject': '采纳：拒绝执行',
+			'panel.adoptPlanDismiss': '采纳：要求修改计划',
+			'panel.countdownHeld': '已暂停限时自动跳过',
+			'panel.countdownActive': '限时提问倒计时中（发起评估或聚焦卡片将自动保持）',
+			'panel.takeTime': '暂停倒计时',
 
 			'settings.nav': 'Jev',
 			'settings.title': 'Jev 决策建议',
@@ -116,6 +146,9 @@ window.__ModuleLoader__.load({
 			'settings.requireConfirmation': '发送前要求确认',
 			'settings.redactSensitive': '发送前遮盖常见凭证',
 			'settings.redactSensitiveHint': '不能识别所有敏感信息',
+			'settings.comparePerspectives': '默认开启单次请求「多视角取舍对比」（自动按问题匹配或使用下方自定义视角）',
+			'settings.customPerspectives': '默认对比视角（可选，逗号分隔 1~5 个；留空则按问题类型自动匹配）',
+			'settings.customPerspectivesPlaceholder': '例如：安全与最小影响, 尽量少改代码, 尽快完成',
 			'settings.transcriptMessages': '上下文消息条数',
 			'settings.timeoutMs': '超时（毫秒）',
 			'settings.save': '保存',
@@ -194,6 +227,36 @@ window.__ModuleLoader__.load({
 			'panel.preferenceStable': 'Prefer stability',
 			'panel.preferenceFast': 'Finish quickly',
 			'panel.preferenceMinimal': 'Change as little code as possible',
+			'panel.comparePerspectives': 'Compare trade-off perspectives in one request (adaptive / 1–5 customizable)',
+			'panel.perspectivesTitle': 'Trade-off perspectives',
+			'panel.perspectivesConsistent': 'All {count} perspectives agree on this option',
+			'panel.perspective.stable': 'Prefer stability',
+			'panel.perspective.fast': 'Finish quickly',
+			'panel.perspective.minimal': 'Minimal code changes',
+			'panel.perspective.security': 'Security & blast radius',
+			'panel.perspective.progress': 'Unblock task progress',
+			'panel.perspective.completeness': 'Completeness & edge cases',
+			'panel.perspective.ux': 'User experience & clarity',
+			'panel.perspective.extensibility': 'Long-term extensibility',
+			'panel.perspectivesEditorTitle': 'Active perspectives (1–5, auto-matched to question, customizable)',
+			'panel.perspectiveQuickAdd': 'Quick add:',
+			'panel.perspectiveCustomPlaceholder': 'Custom perspective (e.g. Zero new deps)',
+			'panel.perspectiveAdd': 'Add perspective',
+			'panel.perspectiveApply': 'Compare selected perspectives',
+			'panel.perspectiveApplyIdle': 'Save selected perspectives',
+			'panel.perspectiveRemove': 'Remove perspective {label}',
+			'panel.riskScore.0': 'Risk rating: Low risk (0/2)',
+			'panel.riskScore.1': 'Risk rating: Medium risk (1/2)',
+			'panel.riskScore.2': 'Risk rating: High risk (2/2)',
+			'panel.planScore.0': 'Plan readiness: Major gaps or risks (0/2)',
+			'panel.planScore.1': 'Plan readiness: Acceptable with caveats (1/2)',
+			'panel.planScore.2': 'Plan readiness: Complete and sound (2/2)',
+			'panel.adoptAllowOnce': 'Adopt: Allow once',
+			'panel.adoptReject': 'Adopt: Reject',
+			'panel.adoptPlanDismiss': 'Adopt: Request changes',
+			'panel.countdownHeld': 'Auto-skip timer paused',
+			'panel.countdownActive': 'Timed question active (evaluating or focusing this card holds the timer)',
+			'panel.takeTime': 'Pause timer',
 
 			'settings.nav': 'Jev',
 			'settings.title': 'Jev decision advice',
@@ -229,6 +292,9 @@ window.__ModuleLoader__.load({
 			'settings.requireConfirmation': 'Require confirmation before sending',
 			'settings.redactSensitive': 'Mask common credentials before sending',
 			'settings.redactSensitiveHint': 'Not all sensitive information can be detected',
+			'settings.comparePerspectives': 'Compare trade-off perspectives by default in a single request (question-adaptive or custom below)',
+			'settings.customPerspectives': 'Default trade-off perspectives (optional, comma-separated 1–5; leave blank for question-adaptive defaults)',
+			'settings.customPerspectivesPlaceholder': 'e.g. Security & blast radius, Minimal code changes, Finish quickly',
 			'settings.transcriptMessages': 'Context messages',
 			'settings.timeoutMs': 'Timeout (ms)',
 			'settings.save': 'Save',
@@ -337,6 +403,7 @@ window.__ModuleLoader__.load({
 					error.retryable = false
 					throw error
 				}
+				const expectedCompare = sent.comparePerspectives === true ? true : undefined
 				const detail = {
 					bindingType: binding === null ? 'null' : typeof binding,
 					reqIdMatch: isRecord(binding) ? binding.requestId === sent.requestId : 'n/a',
@@ -344,10 +411,16 @@ window.__ModuleLoader__.load({
 					keyMatch: isRecord(binding) ? binding.interactionKey === sent.interactionKey : 'n/a',
 					questionsMatch: isRecord(binding) ? sameJson(binding.questions, sent.questions) : 'n/a',
 					decisionPreferenceMatch: isRecord(binding) ? sameJson(binding.decisionPreference, sent.decisionPreference) : 'n/a',
+					comparePerspectivesMatch: isRecord(binding) ? sameJson(binding.comparePerspectives, expectedCompare) : 'n/a',
+					perspectivesMatch: isRecord(binding) ? sameJson(binding.perspectives, sent.perspectives) : 'n/a',
+					approvalMatch: isRecord(binding) ? sameJson(binding.approval, sent.approval) : 'n/a',
 				}
 				if (!isRecord(binding) || binding.requestId !== sent.requestId || binding.sessionId !== sent.sessionId
 					|| binding.interactionKey !== sent.interactionKey || !sameJson(binding.questions, sent.questions)
-					|| !sameJson(binding.decisionPreference, sent.decisionPreference)) {
+					|| !sameJson(binding.decisionPreference, sent.decisionPreference)
+					|| !sameJson(binding.comparePerspectives, expectedCompare)
+					|| !sameJson(binding.perspectives, sent.perspectives)
+					|| !sameJson(binding.approval, sent.approval)) {
 					throw new Error(`the dsh-jev-advisor host bridge returned a different request ${JSON.stringify(detail)}`)
 				}
 			}
@@ -392,7 +465,16 @@ window.__ModuleLoader__.load({
 			if (!entry.supported) return true
 			if (!['choice', 'noul-set'].includes(entry.kind) || typeof entry.answered !== 'boolean' || !Array.isArray(entry.probabilities)) return false
 			const validRow = (row) => isRecord(row) && Number.isInteger(row.index) && row.index >= 0 && typeof row.label === 'string' && isProbability(row.probability)
+			const validScore = (score) => isRecord(score) && Number.isInteger(score.score) && score.score >= 0 && score.score <= 2 && (score.confidence === undefined || isProbability(score.confidence))
+			const validPerspective = (item) => isRecord(item) && typeof item.id === 'string' && item.id.trim() !== ''
+				&& (item.label === undefined || typeof item.label === 'string')
+				&& typeof item.noneOfTheAbove === 'boolean' && isProbability(item.noneProbability)
+				&& (item.noneOfTheAbove ? item.pick === undefined : validRow(item.pick))
+				&& (item.confidence === undefined || isProbability(item.confidence))
 			if (!entry.probabilities.every(validRow) || (entry.confidence !== undefined && !isProbability(entry.confidence))) return false
+			if (entry.riskScore !== undefined && !validScore(entry.riskScore)) return false
+			if (entry.planScore !== undefined && !validScore(entry.planScore)) return false
+			if (entry.perspectives !== undefined && (!Array.isArray(entry.perspectives) || !entry.perspectives.every(validPerspective))) return false
 			if (!entry.answered) return true
 			if (entry.kind === 'choice') return typeof entry.noneOfTheAbove === 'boolean' && isProbability(entry.noneProbability)
 				&& (entry.noneOfTheAbove ? entry.pick === undefined : validRow(entry.pick))
@@ -465,6 +547,74 @@ window.__ModuleLoader__.load({
 			return typeof value === 'string' ? value.trim().slice(0, 500) : ''
 		}
 
+		const PERSPECTIVE_PRESETS = [
+			{ id: 'stable', prompt: 'prioritize stability, safety, and reliability' },
+			{ id: 'fast', prompt: 'prioritize speed of completion and minimal delay' },
+			{ id: 'minimal', prompt: 'prioritize minimal code or state changes' },
+			{ id: 'security', prompt: 'prioritize security boundaries, least privilege, and minimal blast radius' },
+			{ id: 'progress', prompt: 'prioritize unblocking the current task and workflow momentum' },
+			{ id: 'completeness', prompt: 'prioritize architectural completeness, edge cases, and rollback safety' },
+			{ id: 'ux', prompt: 'prioritize user experience, clarity, and intuitive interaction' },
+			{ id: 'extensibility', prompt: 'prioritize long-term maintainability and extensibility' },
+		]
+		const PRESET_PERSPECTIVE_IDS = new Set(PERSPECTIVE_PRESETS.map((item) => item.id))
+
+		function presetPerspective(id, t) {
+			const preset = PERSPECTIVE_PRESETS.find((item) => item.id === id)
+			const key = `panel.perspective.${id}`
+			const translated = typeof t === 'function' ? t(key) : id
+			const label = typeof translated === 'string' && translated !== '' && translated !== key ? translated : id
+			return { id, label, prompt: preset ? preset.prompt : label }
+		}
+
+		function perspectiveLabelOf(item, t) {
+			if (isRecord(item) && typeof item.id === 'string' && PRESET_PERSPECTIVE_IDS.has(item.id) && typeof t === 'function') {
+				const key = `panel.perspective.${item.id}`
+				const translated = t(key)
+				if (typeof translated === 'string' && translated !== '' && translated !== key) return translated
+			}
+			if (isRecord(item) && typeof item.label === 'string' && item.label.trim() !== '') return item.label.trim()
+			return isRecord(item) && typeof item.id === 'string' ? item.id : ''
+		}
+
+		function parseCustomPerspectives(raw) {
+			if (typeof raw !== 'string' || raw.trim() === '') return []
+			const seen = new Set()
+			const result = []
+			for (const part of raw.split(/[,，;；\n]+/)) {
+				const label = part.trim().slice(0, 80)
+				if (label === '' || seen.has(label)) continue
+				seen.add(label)
+				result.push({ id: `custom_${String(result.length)}`, label, prompt: label })
+				if (result.length >= 5) break
+			}
+			return result
+		}
+
+		/** 根据当前问题类型（越权审批、Plan Review、UI/UX、高危操作、架构或通用工程）自动匹配 2~4 个最契合的对比视角。 */
+		function defaultPerspectivesFor(normalized, customPerspectives, t) {
+			const custom = parseCustomPerspectives(customPerspectives)
+			if (custom.length > 0) return custom
+			const questions = Array.isArray(normalized?.questions) ? normalized.questions : []
+			if (normalized?.kind === 'approval' || questions.some((q) => q?.approval === true)) {
+				return [presetPerspective('security', t), presetPerspective('progress', t)]
+			}
+			if (questions.some((q) => q?.planReview === true)) {
+				return [presetPerspective('completeness', t), presetPerspective('minimal', t), presetPerspective('fast', t)]
+			}
+			const combinedText = questions.map((q) => `${q?.header ?? ''} ${q?.question ?? ''} ${q?.detail ?? ''}`).join(' ')
+			if (/\b(?:ui|ux|css|style|layout|design|button|modal|dialog|panel)\b|界面|交互|样式|视觉|体验|设计|布局|弹窗/i.test(combinedText)) {
+				return [presetPerspective('ux', t), presetPerspective('minimal', t)]
+			}
+			if (/\b(?:rm|delete|drop|remove|prod|production|secret|token|auth|permission|credential|migration)\b|删除|生产|权限|密钥|迁移|破坏|高危/i.test(combinedText)) {
+				return [presetPerspective('security', t), presetPerspective('stable', t)]
+			}
+			if (/\b(?:architecture|schema|interface|api|plugin|sdk|refactor|module)\b|架构|接口|重构|扩展|模块|抽象/i.test(combinedText)) {
+				return [presetPerspective('stable', t), presetPerspective('extensibility', t), presetPerspective('minimal', t), presetPerspective('fast', t)]
+			}
+			return [presetPerspective('stable', t), presetPerspective('fast', t), presetPerspective('minimal', t)]
+		}
+
 		/** 校验宿主返回的隐私及请求大小元数据，避免异常值污染展示。 */
 		function validPrivacy(value, required = false) {
 			if (!isRecord(value)) return false
@@ -495,6 +645,12 @@ window.__ModuleLoader__.load({
 
 		function interactionAllowsAdvice(interaction) {
 			if (!interaction || interaction.review !== undefined) return false
+			if (interaction.kind === 'approval') {
+				return interaction.answerable !== false
+					&& typeof interaction.toolName === 'string'
+					&& interaction.toolName.trim() !== ''
+					&& typeof interaction.answer === 'function'
+			}
 			if (typeof interaction.getSnapshot !== 'function') return true
 			const snapshot = interactionSnapshotOf(interaction)
 			return snapshot?.closed === false && (snapshot.channel === 'waterfall' || snapshot.channel === 'rpc')
@@ -503,6 +659,31 @@ window.__ModuleLoader__.load({
 		function pendingQuestionsOf(interaction) {
 			if (interaction === undefined || interaction === null) return undefined
 			if (!interactionAllowsAdvice(interaction)) return undefined
+			if (interaction.kind === 'approval') {
+				const toolName = interaction.toolName.trim()
+				const reason = typeof interaction.reason === 'string' && interaction.reason.trim() !== '' ? interaction.reason.trim() : undefined
+				const callId = typeof interaction.callId === 'string' && interaction.callId.trim() !== '' ? interaction.callId.trim() : undefined
+				const approval = { toolName }
+				if (callId !== undefined) approval.callId = callId
+				if (reason !== undefined) approval.reason = reason
+				return {
+					kind: 'approval',
+					approval,
+					complete: true,
+					questions: [{
+						id: 'approval',
+						question: reason !== undefined ? `Approve tool "${toolName}"? (${reason})` : `Approve execution of tool "${toolName}"?`,
+						header: `Tool approval: ${toolName}`,
+						detail: reason,
+						multiSelect: false,
+						approval: true,
+						options: [
+							{ label: 'allow-once', description: 'Allow this tool invocation once' },
+							{ label: 'reject', description: 'Reject this tool invocation' },
+						],
+					}],
+				}
+			}
 			const raw = interaction.questions
 			if (!Array.isArray(raw) || raw.length === 0) return undefined
 			const questions = []
@@ -521,14 +702,18 @@ window.__ModuleLoader__.load({
 					})
 				}
 				if (options.length === 0 || options.length !== question.options.length || new Set(options.map((option) => option.label)).size !== options.length) continue
-				questions.push({
+				const normalizedQuestion = {
 					id: question.id,
 					question: question.question,
 					header: typeof question.header === 'string' ? question.header : undefined,
 					detail: typeof question.detail === 'string' ? question.detail : undefined,
 					multiSelect: question.multiSelect === true,
 					options,
-				})
+				}
+				if (interaction.kind === 'plan-review' || (raw.length === 1 && question.intent?.kind === 'plan-review')) {
+					normalizedQuestion.planReview = true
+				}
+				questions.push(normalizedQuestion)
 			}
 			if (questions.length === 0) return undefined
 			return { questions, complete: questions.length === raw.length }
@@ -570,8 +755,11 @@ window.__ModuleLoader__.load({
 					value = Number(raw)
 					const [min, max] = field === 'transcriptMessages' ? [0, 100] : [1000, 180000]
 					if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${field} must be an integer between ${min} and ${max}`)
-				} else if (['enabled', 'autoAdvise', 'includeTranscript', 'requireConfirmation', 'redactSensitive'].includes(field)) {
+				} else if (['enabled', 'autoAdvise', 'includeTranscript', 'requireConfirmation', 'redactSensitive', 'comparePerspectives'].includes(field)) {
 					if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`)
+				} else if (field === 'customPerspectives') {
+					if (typeof raw !== 'string') throw new Error('customPerspectives must be a string')
+					value = raw.trim().slice(0, 300)
 				} else throw new Error('unknown settings field')
 				ops.push({ op: 'set', path: [field], value })
 			}
@@ -638,6 +826,22 @@ window.__ModuleLoader__.load({
 		/** Whether every question in the batch carries a decisive Jev answer. */
 		function isAdoptable(questions, advice) {
 			return buildAnswers(questions, advice) !== undefined
+		}
+
+		/** Whether a single-question plan-review interaction can be adopted by dismissing ("Request changes") when Jev selects noneOfTheAbove. */
+		function isPlanDismissable(questions, advice, interaction) {
+			if (typeof interaction?.dismiss !== 'function') return false
+			if (!Array.isArray(questions) || questions.length !== 1 || questions[0]?.planReview !== true) return false
+			if (!Array.isArray(advice) || advice.length !== 1) return false
+			const entry = advice[0]
+			if (!isRecord(entry) || entry.questionId !== questions[0].id || entry.supported !== true || entry.answered !== true) return false
+			if (entry.kind !== 'choice' || entry.noneOfTheAbove !== true || entry.pick !== undefined || !isProbability(entry.noneProbability) || entry.noneProbability <= 0) return false
+			if (entry.confidence !== undefined && !isProbability(entry.confidence)) return false
+			const distribution = entry.probabilities
+			if (!Array.isArray(distribution) || distribution.length !== questions[0].options?.length || !distribution.every((row, index) =>
+				isRecord(row) && row.index === index && row.label === questions[0].options[index]?.label && isProbability(row.probability),
+			)) return false
+			return Math.abs(distribution.reduce((sum, row) => sum + row.probability, entry.noneProbability) - 1) <= 0.010000001
 		}
 
 		/* ------------------------------------------------------------------ *
@@ -1015,14 +1219,14 @@ window.__ModuleLoader__.load({
 			const interaction = useSessionStatus((snapshot) => pendingInteractionOf(snapshot, preferredSessionId))
 			const subscribeInteraction = React.useCallback(listener => typeof interaction?.subscribe === 'function' ? interaction.subscribe(listener) : () => {}, [interaction])
 			const readInteraction = React.useCallback(() => interactionSnapshotOf(interaction), [interaction])
-			React.useSyncExternalStore(subscribeInteraction, readInteraction, readInteraction)
+			const interactionSnapshot = React.useSyncExternalStore(subscribeInteraction, readInteraction, readInteraction)
 
 			const normalized = pendingQuestionsOf(interaction)
 			const questions = normalized === undefined ? undefined : normalized.questions
 			const complete = normalized !== undefined && normalized.complete
 			const sessionId = interaction === undefined || interaction === null ? undefined : interaction.sessionId
 			const interactionKey = interaction === undefined || interaction === null ? undefined : interaction.key
-			const identity = questions === undefined ? '' : JSON.stringify([sessionId, interactionKey, interaction.questions])
+			const identity = questions === undefined ? '' : JSON.stringify([sessionId, interactionKey, interaction.questions ?? normalized.approval])
 
 			const settingsSnapshot = useStoreSnapshot(scope)
 			const settingsValue = settingsSnapshot !== undefined && settingsSnapshot.status === 'ready' ? settingsSnapshot.value : undefined
@@ -1031,6 +1235,7 @@ window.__ModuleLoader__.load({
 			const includeTranscript = settingsValue?.includeTranscript !== false
 			const requireConfirmation = settingsValue?.requireConfirmation === true
 			const autoAdvise = settingsValue?.autoAdvise === true
+			const defaultComparePerspectives = settingsValue?.comparePerspectives === true
 			const manualRequest = React.useRef({ scope: undefined, started: false, generation: 0 })
 			const [result, setState] = React.useState({ status: 'idle' })
 			const [dismissed, setDismissed] = React.useState(undefined)
@@ -1049,7 +1254,7 @@ window.__ModuleLoader__.load({
 			const closedLoading = React.useRef(false)
 			const copyNonce = React.useRef(0)
 			const copying = React.useRef(new Set())
-			const preferenceRef = React.useRef({ identity: undefined, draft: '', applied: '' })
+			const preferenceRef = React.useRef({ identity: undefined, draft: '', applied: '', compareOverride: undefined, perspectivesDraft: undefined, perspectivesApplied: undefined, customInput: '' })
 			const dismissedRef = React.useRef(dismissed)
 			const settingsIdentity = React.useRef(undefined)
 			const settingsProvenance = layoutController.classifySettings(settingsSnapshot, settingsIdentity.current?.revision)
@@ -1057,17 +1262,38 @@ window.__ModuleLoader__.load({
 				settingsIdentity.current = adviceSettingsIdentity(settingsSnapshot, settingsIdentity.current, settingsProvenance)
 			}
 			dismissedRef.current = dismissed
+			const defaultPerspectives = React.useMemo(
+				() => defaultPerspectivesFor(normalized, settingsValue?.customPerspectives, t),
+				[identity, settingsValue?.customPerspectives, t],
+			)
 			// 在 render 阶段按交互身份真正清空草稿和已应用偏好，避免 A→B→A
 			// 又复活旧值；事件处理器也只会写入当前 identity 的槽位。
-			if (preferenceRef.current.identity !== identity) preferenceRef.current = { identity, draft: '', applied: '' }
+			if (preferenceRef.current.identity !== identity) {
+				preferenceRef.current = { identity, draft: '', applied: '', compareOverride: undefined, perspectivesDraft: undefined, perspectivesApplied: undefined, customInput: '' }
+			}
 			const currentDraftPreference = preferenceRef.current.draft
 			const currentAppliedPreference = preferenceRef.current.applied
+			const comparePerspectives = preferenceRef.current.compareOverride ?? defaultComparePerspectives
+			const currentDraftPerspectives = preferenceRef.current.perspectivesDraft ?? defaultPerspectives
+			const currentAppliedPerspectives = preferenceRef.current.perspectivesApplied ?? defaultPerspectives
+			const customPerspectiveInput = preferenceRef.current.customInput ?? ''
 			const collapsed = layout.collapsed === true
 			const dock = layout.dock === 'right' ? 'right' : 'left'
 			const requestScope = JSON.stringify([identity, enabled, autoAdvise, settingsIdentity.current.key])
 			if (manualRequest.current.scope !== requestScope) manualRequest.current = { scope: requestScope, started: false, generation: manualRequest.current.generation + 1 }
 			const authorized = autoAdvise || manualRequest.current.started
-			const requestKey = JSON.stringify([identity, attempt, enabled, requireConfirmation, settingsIdentity.current.key, currentAppliedPreference, authorized, manualRequest.current.generation])
+			const requestKey = JSON.stringify([
+				identity,
+				attempt,
+				enabled,
+				requireConfirmation,
+				settingsIdentity.current.key,
+				currentAppliedPreference,
+				authorized,
+				manualRequest.current.generation,
+				comparePerspectives,
+				comparePerspectives ? currentAppliedPerspectives : null,
+			])
 			latest.current = { requestKey, identity, interaction, active: enabled && !settingsIdentity.current.pending && dismissed !== identity }
 			React.useEffect(() => {
 				latest.current.active = enabled && !settingsIdentity.current.pending && dismissedRef.current !== latest.current.identity
@@ -1085,11 +1311,17 @@ window.__ModuleLoader__.load({
 				if (questions === undefined || !enabled || !authorized || dismissedRef.current === identity) {
 					return undefined
 				}
+				try { interaction?.takeTime?.() } catch { /* 倒计时冻结失败不阻断建议请求。 */ }
 				const controller = new AbortController()
 				requestController.current = { requestKey, controller }
 				setState({ status: 'loading', requestKey })
 				const payload = { requestId: globalThis.crypto.randomUUID(), sessionId, interactionKey, questions }
 				if (currentAppliedPreference !== '') payload.decisionPreference = currentAppliedPreference
+				if (comparePerspectives) {
+					payload.comparePerspectives = true
+					payload.perspectives = currentAppliedPerspectives
+				}
+				if (normalized?.approval !== undefined) payload.approval = normalized.approval
 				const method = requireConfirmation ? 'prepare' : 'advise'
 				callApi(method, payload, controller.signal).then(
 					(value) => {
@@ -1165,12 +1397,89 @@ window.__ModuleLoader__.load({
 				if (latest.current !== undefined) latest.current = { ...latest.current, requestKey: `stale:${requestKey}` }
 				// 即使偏好值绕回旧字符串，也必须生成单调的新评估身份。
 				setAttempt((value) => value + 1)
-				preferenceRef.current = { identity, draft: currentDraftPreference, applied: next }
+				preferenceRef.current = { ...preferenceRef.current, identity, draft: currentDraftPreference, applied: next }
 				setPreferenceRevision((value) => value + 1)
 			}
 			const updateDraftPreference = (value) => {
 				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
-				preferenceRef.current = { identity, draft: String(value), applied: preferenceRef.current.applied }
+				preferenceRef.current = { ...preferenceRef.current, identity, draft: String(value), applied: preferenceRef.current.applied }
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const toggleComparePerspectives = (checked) => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				const next = Boolean(checked)
+				if (next === comparePerspectives) return
+				requestController.current?.controller?.abort()
+				copyNonce.current += 1
+				if (latest.current !== undefined) latest.current = { ...latest.current, requestKey: `stale:${requestKey}` }
+				setAttempt((value) => value + 1)
+				preferenceRef.current = {
+					...preferenceRef.current,
+					identity,
+					compareOverride: next,
+					perspectivesApplied: currentDraftPerspectives,
+				}
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const addDraftPerspective = (candidate) => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				if (currentDraftPerspectives.length >= 5) return
+				const candidateLabel = perspectiveLabelOf(candidate, t)
+				if (candidateLabel === '' || currentDraftPerspectives.some((item) => item.id === candidate.id || perspectiveLabelOf(item, t) === candidateLabel)) return
+				preferenceRef.current = {
+					...preferenceRef.current,
+					identity,
+					perspectivesDraft: [...currentDraftPerspectives, candidate],
+				}
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const removeDraftPerspective = (target) => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				if (currentDraftPerspectives.length <= 1) return
+				const targetLabel = perspectiveLabelOf(target, t)
+				const next = currentDraftPerspectives.filter((item) => !(item.id === target.id && perspectiveLabelOf(item, t) === targetLabel))
+				if (next.length === 0 || next.length === currentDraftPerspectives.length) return
+				preferenceRef.current = {
+					...preferenceRef.current,
+					identity,
+					perspectivesDraft: next,
+				}
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const updateCustomPerspectiveInput = (value) => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				preferenceRef.current = { ...preferenceRef.current, identity, customInput: String(value).slice(0, 80) }
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const addCustomDraftPerspective = () => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				if (currentDraftPerspectives.length >= 5) return
+				const label = customPerspectiveInput.trim().slice(0, 80)
+				if (label === '' || currentDraftPerspectives.some((item) => perspectiveLabelOf(item, t) === label)) return
+				const usedIds = new Set(currentDraftPerspectives.map((item) => item.id))
+				let idx = currentDraftPerspectives.length
+				while (usedIds.has(`custom_${String(idx)}`)) idx += 1
+				preferenceRef.current = {
+					...preferenceRef.current,
+					identity,
+					customInput: '',
+					perspectivesDraft: [...currentDraftPerspectives, { id: `custom_${String(idx)}`, label, prompt: label }],
+				}
+				setPreferenceRevision((revision) => revision + 1)
+			}
+			const applyPerspectives = () => {
+				if (latest.current?.identity !== identity || latest.current?.requestKey !== requestKey || latest.current?.active !== true) return
+				if (sameJson(currentDraftPerspectives, currentAppliedPerspectives)) return
+				requestController.current?.controller?.abort()
+				copyNonce.current += 1
+				if (latest.current !== undefined) latest.current = { ...latest.current, requestKey: `stale:${requestKey}` }
+				setAttempt((value) => value + 1)
+				preferenceRef.current = {
+					...preferenceRef.current,
+					identity,
+					perspectivesDraft: currentDraftPerspectives,
+					perspectivesApplied: currentDraftPerspectives,
+				}
 				setPreferenceRevision((revision) => revision + 1)
 			}
 			const copyAnswers = async () => {
@@ -1207,8 +1516,11 @@ window.__ModuleLoader__.load({
 			}
 
 			const advice = state.status === 'ready' ? state.value.advice : undefined
-			const adoptable = complete && typeof sessionId === 'string' && sessionId !== '' && typeof interactionKey === 'string' && interactionKey !== ''
+			const answerAdoptable = complete && typeof sessionId === 'string' && sessionId !== '' && typeof interactionKey === 'string' && interactionKey !== ''
 				&& typeof interaction.answer === 'function' && advice !== undefined && isAdoptable(questions, advice)
+			const planDismissable = complete && typeof sessionId === 'string' && sessionId !== '' && typeof interactionKey === 'string' && interactionKey !== ''
+				&& advice !== undefined && !answerAdoptable && isPlanDismissable(questions, advice, interaction)
+			const adoptable = answerAdoptable || planDismissable
 
 			const confirmSend = async (prepared = state.value) => {
 				if (!requireConfirmation || !isRecord(prepared) || !isRecord(prepared.binding) || typeof prepared.previewToken !== 'string'
@@ -1232,18 +1544,38 @@ window.__ModuleLoader__.load({
 
 			const adopt = async () => {
 				if (!adoptable || !latest.current.active || !interactionAllowsAdvice(latest.current.interaction) || latest.current.requestKey !== requestKey || submitting.current.has(identity)) return
-				const answers = buildAnswers(questions, advice)
-				if (answers === undefined) return
+				const isDismiss = !answerAdoptable && planDismissable
+				const answers = isDismiss ? undefined : buildAnswers(questions, advice)
+				if (!isDismiss && answers === undefined) return
 				// 同步锁覆盖双击及 React 尚未重新渲染的时间窗口。
 				submitting.current.add(identity)
 				setSubmission({ status: 'busy', identity })
 				try {
-					await latest.current.interaction.answer({ answers })
+					if (isDismiss) {
+						await latest.current.interaction.dismiss()
+					} else if (normalized?.kind === 'approval') {
+						const picked = answers[0]?.selected?.[0]
+						const outcome = picked === 'allow-once' ? 'allowed-once' : picked === 'reject' ? 'rejected' : undefined
+						if (outcome === undefined) throw new Error('invalid approval outcome')
+						await latest.current.interaction.answer(outcome)
+					} else {
+						await latest.current.interaction.answer({ answers })
+					}
 					if (latest.current.active && latest.current.identity === identity) setSubmission({ status: 'submitted', identity })
 				} catch (error) {
 					submitting.current.delete(identity)
 					if (latest.current.active && latest.current.identity === identity) setSubmission({ status: 'error', identity, error: error instanceof Error ? error.message : String(error) })
 				}
+			}
+
+			const onFocusCapture = (event) => {
+				if (event?.relatedTarget && typeof event?.currentTarget?.contains === 'function' && event.currentTarget.contains(event.relatedTarget)) return
+				try { latest.current?.interaction?.holdFocus?.() } catch { /* ignore */ }
+			}
+			const onBlurCapture = (event) => {
+				if (event?.relatedTarget && typeof event?.currentTarget?.contains === 'function' && event.currentTarget.contains(event.relatedTarget)) return
+				if (state.status === 'loading' || state.status === 'sending') return
+				try { latest.current?.interaction?.releaseFocus?.() } catch { /* ignore */ }
 			}
 
 			const children = []
@@ -1270,9 +1602,21 @@ window.__ModuleLoader__.load({
 
 			if (!collapsed) children.push(h('div', { key: 'dock-help', style: S.note }, t('panel.dockHelp')))
 			if (layoutState.failed) children.push(h('div', { key: 'layout-error', style: S.error, role: 'status' }, t('panel.layoutSaveFailed')))
+			if (!collapsed && isRecord(interactionSnapshot?.countdown)) {
+				const running = interactionSnapshot.countdown.running === true
+				children.push(h(
+					'div',
+					{ key: 'countdown', style: S.actions, 'data-dsh-jev-advisor': 'countdown' },
+					h('span', { style: S.note }, t(running ? 'panel.countdownActive' : 'panel.countdownHeld')),
+					running && typeof interaction.takeTime === 'function'
+						? h('button', { type: 'button', style: S.secondary, onClick: () => { try { interaction.takeTime() } catch {} } }, t('panel.takeTime'))
+						: null,
+				))
+			}
 
 			if (!collapsed) {
 				const preferenceChanged = normalizeDecisionPreference(currentDraftPreference) !== currentAppliedPreference
+				const perspectivesChanged = comparePerspectives && !sameJson(currentDraftPerspectives, currentAppliedPerspectives)
 				children.push(h(
 					'div',
 					{ key: 'decision-preference', style: S.section, 'data-dsh-jev-advisor': 'decision-preference' },
@@ -1296,6 +1640,83 @@ window.__ModuleLoader__.load({
 						h('button', { type: 'button', style: { ...S.primary, opacity: preferenceChanged ? 1 : 0.5 }, disabled: !preferenceChanged, onClick: applyPreference }, t(authorized ? 'panel.preferenceApply' : 'panel.preferenceApplyIdle')),
 						preferenceChanged ? h('span', { style: S.note }, t(authorized ? 'panel.preferenceApplied' : 'panel.preferenceNext')) : null,
 					),
+					h('label', { style: S.checkboxRow },
+						h('input', {
+							type: 'checkbox',
+							checked: comparePerspectives,
+							onChange: (event) => toggleComparePerspectives(event.target.checked),
+						}),
+						t('panel.comparePerspectives'),
+					),
+					comparePerspectives
+						? h('div', { style: S.section, 'data-dsh-jev-advisor': 'perspectives-editor' },
+							h('div', { style: S.note }, t('panel.perspectivesEditorTitle')),
+							h('div', { style: S.actions, 'data-dsh-jev-advisor': 'perspectives-active' },
+								...currentDraftPerspectives.map((item) => {
+									const label = perspectiveLabelOf(item, t)
+									return h('span', {
+										key: `active-${String(item.id)}-${label}`,
+										style: { ...S.secondary, display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', fontSize: '11px', cursor: 'default' },
+									},
+										h('span', null, label),
+										currentDraftPerspectives.length > 1
+											? h('button', {
+												type: 'button',
+												style: { ...S.iconButton, fontSize: '11px', padding: '0 2px' },
+												title: t('panel.perspectiveRemove', { label }),
+												'aria-label': t('panel.perspectiveRemove', { label }),
+												onClick: () => removeDraftPerspective(item),
+											}, '×')
+											: null,
+									)
+								}),
+							),
+							currentDraftPerspectives.length < 5
+								? h('div', { style: S.actions, 'data-dsh-jev-advisor': 'perspectives-presets' },
+									h('span', { style: S.note }, t('panel.perspectiveQuickAdd')),
+									...PERSPECTIVE_PRESETS
+										.map((preset) => presetPerspective(preset.id, t))
+										.filter((candidate) => !currentDraftPerspectives.some((active) => active.id === candidate.id || perspectiveLabelOf(active, t) === candidate.label))
+										.map((candidate) => h('button', {
+											key: `preset-${candidate.id}`,
+											type: 'button',
+											style: { ...S.secondary, padding: '2px 7px', fontSize: '11px' },
+											onClick: () => addDraftPerspective(candidate),
+										}, `+ ${candidate.label}`)),
+								)
+								: null,
+							currentDraftPerspectives.length < 5
+								? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+									h('input', {
+										type: 'text',
+										style: { ...S.input, flex: '1 1 auto' },
+										value: customPerspectiveInput,
+										maxLength: 80,
+										placeholder: t('panel.perspectiveCustomPlaceholder'),
+										onChange: (event) => updateCustomPerspectiveInput(event.target.value),
+										onKeyDown: (event) => {
+											if (event.key === 'Enter') {
+												event.preventDefault()
+												addCustomDraftPerspective()
+											}
+										},
+									}),
+									h('button', {
+										type: 'button',
+										style: S.secondary,
+										disabled: customPerspectiveInput.trim() === '',
+										onClick: addCustomDraftPerspective,
+									}, t('panel.perspectiveAdd')),
+								)
+								: null,
+							perspectivesChanged
+								? h('div', { style: S.actions },
+									h('button', { type: 'button', style: S.primary, onClick: applyPerspectives }, t(authorized ? 'panel.perspectiveApply' : 'panel.perspectiveApplyIdle')),
+									h('span', { style: S.note }, t(authorized ? 'panel.preferenceApplied' : 'panel.preferenceNext')),
+								)
+								: null,
+						)
+						: null,
 				))
 			}
 
@@ -1364,7 +1785,14 @@ window.__ModuleLoader__.load({
 			}
 
 			const cardStyle = dock === 'right' ? { ...S.card, left: 'auto', right: '12px' } : S.card
-			return h('div', { style: cardStyle, 'data-dsh-jev-advisor': 'advice', 'data-dock': dock, 'data-collapsed': collapsed ? 'true' : 'false' }, ...children)
+			return h('div', {
+				style: cardStyle,
+				'data-dsh-jev-advisor': 'advice',
+				'data-dock': dock,
+				'data-collapsed': collapsed ? 'true' : 'false',
+				onFocusCapture,
+				onBlurCapture,
+			}, ...children)
 		}
 
 		/** 确认模式只展示宿主准备好的精确 JSON，确认前绝不触发 advise。 */
@@ -1475,6 +1903,33 @@ window.__ModuleLoader__.load({
 						if (hint?.kind === 'choice-close') rows.push(h('div', { key: 'hint', style: S.note }, t('panel.probabilityClose')))
 						if (hint?.kind === 'choice-other-higher') rows.push(h('div', { key: 'hint', style: S.note }, t('panel.probabilityOtherHigher')))
 					}
+					if (isRecord(entry.riskScore) && Number.isInteger(entry.riskScore.score) && entry.riskScore.score >= 0 && entry.riskScore.score <= 2) {
+						rows.push(h('div', { key: 'risk-score', style: S.note, 'data-dsh-jev-advisor': 'risk-score' }, t(`panel.riskScore.${String(entry.riskScore.score)}`)))
+					}
+					if (isRecord(entry.planScore) && Number.isInteger(entry.planScore.score) && entry.planScore.score >= 0 && entry.planScore.score <= 2) {
+						rows.push(h('div', { key: 'plan-score', style: S.note, 'data-dsh-jev-advisor': 'plan-score' }, t(`panel.planScore.${String(entry.planScore.score)}`)))
+					}
+					if (Array.isArray(entry.perspectives) && entry.perspectives.length > 0) {
+						const allConsistent = entry.noneOfTheAbove === false && entry.pick !== undefined
+							&& entry.perspectives.every((item) => item.noneOfTheAbove === false && item.pick?.index === entry.pick.index)
+						rows.push(
+							h(
+								'div',
+								{ key: 'perspectives', style: S.distribution, 'data-dsh-jev-advisor': 'perspectives' },
+								h('div', null, t('panel.perspectivesTitle')),
+								allConsistent
+									? h('div', { key: 'consistent', style: S.note }, t('panel.perspectivesConsistent', { count: String(entry.perspectives.length) }))
+									: entry.perspectives.map((item) =>
+										h(
+											'div',
+											{ key: `perspective-${String(item.id)}`, style: S.row },
+											h('span', null, perspectiveLabelOf(item, t)),
+											h('span', { style: S.probability }, item.noneOfTheAbove || !item.pick ? '—' : `${displayLabel(item.pick.label)} (${String(Math.round(item.pick.probability * 100))}%)`),
+										),
+									),
+							),
+						)
+					}
 				}
 
 				if (entry.kind === 'noul-set') {
@@ -1508,6 +1963,12 @@ window.__ModuleLoader__.load({
 				children.push(h('div', { key: 'partial', style: S.note }, t('panel.partial')))
 			}
 
+			const adoptLabelKey = questions.length === 1 && questions[0]?.approval === true
+				? (advice[0]?.pick?.label === 'reject' ? 'panel.adoptReject' : 'panel.adoptAllowOnce')
+				: (questions.length === 1 && questions[0]?.planReview === true && advice[0]?.noneOfTheAbove === true
+					? 'panel.adoptPlanDismiss'
+					: 'panel.adopt')
+
 			children.push(
 				h(
 					'div',
@@ -1525,7 +1986,7 @@ window.__ModuleLoader__.load({
 							disabled: !adoptable || busy,
 							onClick: onAdopt,
 						},
-						busy ? t('panel.adopting') : t('panel.adopt'),
+						busy ? t('panel.adopting') : t(adoptLabelKey),
 					),
 				),
 			)
@@ -1860,6 +2321,27 @@ window.__ModuleLoader__.load({
 					h('span', { style: S.note }, t('settings.redactSensitiveHint')),
 				),
 				h(
+					'label',
+					{ style: S.checkboxRow },
+					h('input', {
+						type: 'checkbox',
+						checked: read('comparePerspectives', false) === true,
+						onChange: (event) => set('comparePerspectives', event.target.checked),
+					}),
+					t('settings.comparePerspectives'),
+				),
+				h(
+					Field,
+					{ label: t('settings.customPerspectives') },
+					h('input', {
+						type: 'text',
+						style: S.input,
+						placeholder: t('settings.customPerspectivesPlaceholder'),
+						value: String(read('customPerspectives', '')),
+						onChange: (event) => set('customPerspectives', event.target.value),
+					}),
+				),
+				h(
 					Field,
 					{ label: t('settings.transcriptMessages') },
 					h('input', {
@@ -1963,6 +2445,9 @@ window.__ModuleLoader__.load({
 			decisionHintOf,
 			buildCopyText,
 			normalizeDecisionPreference,
+			defaultPerspectivesFor,
+			parseCustomPerspectives,
+			perspectiveLabelOf,
 			readLayoutPreference,
 			initialLayoutOf,
 			createLayoutController,

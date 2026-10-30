@@ -49,6 +49,8 @@ function harness(t) {
       const payload = JSON.parse(options.body)
       const binding = { requestId: payload.requestId, sessionId: payload.sessionId, interactionKey: payload.interactionKey, questions: payload.questions }
       if (payload.decisionPreference !== undefined) binding.decisionPreference = payload.decisionPreference
+      if (payload.comparePerspectives !== undefined) binding.comparePerspectives = payload.comparePerspectives
+      if (payload.approval !== undefined) binding.approval = payload.approval
       const result = value !== null && typeof value === 'object' && !Array.isArray(value) ? { binding, ...value } : value
       resolve({ ok: true, status: 200, json: async () => ({ ok: true, value: result }) })
     } })
@@ -491,3 +493,119 @@ test('a host that changes a non-empty decision preference is rejected as a diffe
 	} })
 	await assert.rejects(pending, /different request/)
 })
+
+test('限时提问在发起评估时调用 takeTime 冻结倒计时，聚焦与失焦联动 holdFocus / releaseFocus', async (t) => {
+	const h = harness(t)
+	h.snapshot.value.autoAdvise = false
+	let held = 0
+	let released = 0
+	let taken = 0
+	const timed = {
+		...interaction('timed-1'),
+		getSnapshot: () => ({
+			closed: false,
+			channel: 'waterfall',
+			waitState: taken > 0 ? 'waiting' : 'counting',
+			countdown: { remainingMs: 12000, running: taken === 0 },
+		}),
+		holdFocus: () => { held += 1 },
+		releaseFocus: () => { released += 1 },
+		takeTime: () => { taken += 1 },
+	}
+	h.setInteraction(timed)
+	const root = h.render()
+	assert.equal(taken, 0)
+	root.props.onFocusCapture?.({ currentTarget: { contains: () => false }, relatedTarget: null })
+	assert.equal(held, 1)
+	root.props.onBlurCapture?.({ currentTarget: { contains: () => false }, relatedTarget: null })
+	assert.equal(released, 1)
+	h.button('panel.ask').onClick()
+	h.render()
+	assert.equal(taken, 1)
+})
+
+test('越权审批支持双向一键采纳（allowed-once 与 rejected），且结算后不可重复提交', async (t) => {
+	const h = harness(t)
+	const outcomes = []
+	let answerable = true
+	const approval = {
+		key: 'approval:7',
+		sessionId: 'session-a',
+		kind: 'approval',
+		toolName: 'bash',
+		callId: 'call-7',
+		reason: 'Execute privileged script',
+		get answerable() { return answerable },
+		answer: async (outcome) => { outcomes.push(outcome); answerable = false },
+	}
+	h.setInteraction(approval)
+	h.render()
+	assert.equal(h.requests.length, 1)
+	const sent = JSON.parse(h.requests[0].options.body)
+	assert.deepEqual(sent.approval, { toolName: 'bash', callId: 'call-7', reason: 'Execute privileged script' })
+	h.requests[0].respond({
+		advice: [{
+			questionId: 'approval',
+			kind: 'choice',
+			supported: true,
+			answered: true,
+			pick: { index: 1, label: 'reject', probability: 0.85 },
+			noneOfTheAbove: false,
+			noneProbability: 0.05,
+			confidence: 0.9,
+			riskScore: { score: 2, confidence: 0.88 },
+			probabilities: [
+				{ index: 0, label: 'allow-once', probability: 0.1 },
+				{ index: 1, label: 'reject', probability: 0.85 },
+			],
+		}],
+	})
+	await h.settle()
+	assert.equal(h.body().adoptable, true)
+	await h.body().onAdopt()
+	await h.settle()
+	assert.deepEqual(outcomes, ['rejected'])
+})
+
+test('plan-review 在 Jev 选择 noneOfTheAbove 时可通过 dismiss 一键要求修改计划', async (t) => {
+	const h = harness(t)
+	let dismissed = 0
+	const planInteraction = {
+		key: 'question:session-a:plan-1',
+		sessionId: 'session-a',
+		kind: 'plan-review',
+		questions: [{
+			id: 'plan',
+			question: 'Approve this plan?',
+			detail: '# Plan\n1. Drop database',
+			intent: { kind: 'plan-review', approve: 'Approve' },
+			options: [{ label: 'Approve' }],
+		}],
+		answer: async () => {},
+		dismiss: async () => { dismissed += 1 },
+	}
+	h.setInteraction(planInteraction)
+	h.render()
+	h.requests[0].respond({
+		advice: [{
+			questionId: 'plan',
+			kind: 'choice',
+			supported: true,
+			answered: true,
+			pick: undefined,
+			noneOfTheAbove: true,
+			noneProbability: 0.82,
+			confidence: 0.8,
+			planScore: { score: 0, confidence: 0.78 },
+			probabilities: [
+				{ index: 0, label: 'Approve', probability: 0.18 },
+			],
+		}],
+	})
+	await h.settle()
+	assert.equal(h.body().adoptable, true)
+	await h.body().onAdopt()
+	await h.settle()
+	assert.equal(dismissed, 1)
+})
+

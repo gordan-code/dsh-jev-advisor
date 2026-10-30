@@ -55,6 +55,8 @@ export declare const Config: Schema<{
   includeTranscript: boolean
   requireConfirmation: boolean
   redactSensitive: boolean
+  comparePerspectives: boolean
+  customPerspectives: string
   transcriptMessages: number
   timeoutMs: number
   cardDock: '' | 'left' | 'right'
@@ -86,6 +88,8 @@ export interface JevQuestion {
   header?: string
   detail?: string
   multiSelect: boolean
+  approval?: boolean
+  planReview?: boolean
   options: { label: string; description?: string }[]
 }
 
@@ -93,6 +97,7 @@ export interface JevQuestion {
 export declare function buildJevRequest(
   questions: JevQuestion[],
   transcript: string,
+  options?: { comparePerspectives?: boolean; perspectives?: unknown[]; approval?: unknown },
 ): {
   state: unknown
   questions: Record<string, unknown>
@@ -110,6 +115,9 @@ export declare function prepareJevRequest(options: {
   redactSensitive?: boolean
   maxBytes?: number
   decisionPreference?: string
+  comparePerspectives?: boolean
+  perspectives?: unknown[]
+  approval?: unknown
 }): {
   body: { state: unknown; model: string; questions: Record<string, unknown> }
   plan: unknown[]

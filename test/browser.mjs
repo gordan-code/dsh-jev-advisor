@@ -1048,7 +1048,7 @@ test('来源不明的布局修订仍使旧建议失效，不能误判隐藏 Key 
 	})
 })
 
-test('四大新增卖点浏览器端闭环：越权审批采纳、限时提问防超时、多视角取舍对比与 Plan Review 要求修改', async t => {
+test('四大新增卖点浏览器端闭环：越权审批采纳、限时提问防超时、多视角取舍对比与 Plan Review 要求修改', { timeout: 30_000 }, async t => {
 	await withBrowser(t, async ({ page, harness }) => {
 		harness.setAdviseMode('auto')
 		harness.setAdviceOverride((questions) => questions.map((item) => ({
@@ -1086,6 +1086,7 @@ test('四大新增卖点浏览器端闭环：越权审批采纳、限时提问�
 		await card.getByText('Risk rating: High risk (2/2)').waitFor()
 		await card.getByText('Trade-off perspectives', { exact: true }).waitFor()
 		await card.getByLabel('Compare trade-off perspectives in one request (adaptive / 1–5 customizable)').check()
+		await harness.waitForAdvise(record => record.body.comparePerspectives === true)
 		const editor = card.locator('[data-dsh-jev-advisor="perspectives-editor"]')
 		await editor.waitFor()
 		assert.deepEqual(
@@ -1095,11 +1096,27 @@ test('四大新增卖点浏览器端闭环：越权审批采纳、限时提问�
 		)
 		await editor.getByPlaceholder('Custom perspective (e.g. Zero new deps)').fill('Audit trail compliance')
 		await editor.getByRole('button', { name: 'Add perspective' }).click()
-		await editor.getByRole('button', { name: 'Compare selected perspectives' }).click()
-		assert.deepEqual(
-			harness.getRecords('advise').at(-1).body.perspectives.map((item) => item.label),
-			['Security & blast radius', 'Unblock task progress', 'Audit trail compliance'],
-		)
+		// 显式阻挡新请求到达 mock，稳定重现点击完成但宿主尚未收到请求的窗口。
+		let releaseRequest
+		const requestGate = new Promise(resolve => { releaseRequest = resolve })
+		await page.route(`${harness.origin}/dsh-jev-advisor/api/advise`, async route => {
+			await requestGate
+			await route.fallback()
+		})
+		try {
+			const previousRequests = new Set(harness.getRecords('advise'))
+			await editor.getByRole('button', { name: 'Compare selected perspectives' }).click()
+			assert.equal(harness.getRecords('advise').length, previousRequests.size, '请求闸门放行前只存在旧请求')
+			releaseRequest()
+			const compared = await harness.waitForAdvise(record => !previousRequests.has(record))
+			assert.equal(compared.body.interactionKey, 'approval-1')
+			assert.deepEqual(
+				compared.body.perspectives.map((item) => item.label),
+				['Security & blast radius', 'Unblock task progress', 'Audit trail compliance'],
+			)
+		} finally {
+			releaseRequest()
+		}
 		await card.getByRole('button', { name: 'Adopt: Reject' }).click()
 		const approvalCalls = await page.evaluate(() => window.__fixture.getAnswerCalls())
 		assert.deepEqual(approvalCalls.at(-1), { sessionId: 's', interactionKey: 'approval-1', payload: 'rejected' })

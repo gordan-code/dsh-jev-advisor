@@ -2,461 +2,220 @@
 
 English | [中文](docs/README.zh.md)
 
-**Jev gives *you* a second opinion — not the model.**
+**A Jev second opinion for you, not the agent.**
 
-Every other Jev plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) hands
-Jev to the agent. This one hands it to the human. When the model asks you a multiple-choice
-question, `dsh-jev-advisor` turns it into a structured [TypeSafe](https://docs.typesafe.ai) request
-and floats the recommendation beside the options — the full probability spread, Jev's confidence,
-the exact JSON that crossed the wire, and one click to adopt it.
+`dsh-jev-advisor` adds a floating advice card to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+It helps you answer multiple-choice questions, approve or reject tool execution, and review plans.
+Advice comes from [TypeSafe Jev](https://docs.typesafe.ai); nothing is submitted to DSH until you click **Adopt**.
 
-![The advice card appearing beside a question](https://raw.githubusercontent.com/gordan-code/dsh-jev-advisor/main/docs/demo.gif)
+![Advice card beside a question](https://raw.githubusercontent.com/gordan-code/dsh-jev-advisor/main/docs/demo.gif)
 
-| | |
-| --- | --- |
-| **Install** | `dsh plugin --profile <p> add github:gordan-code/dsh-jev-advisor` |
-| **Setup** | paste an API key in **Settings → Jev**. That is the entire configuration. |
-| **Surfaces** | `shell.overlay` + `settings.section` — it never replaces the question card |
-| **Model changes** | none: no prompt edits, no tool the model has to remember to call |
-| **Tests** | request building · client wiring · live round trip against a mock endpoint |
-| **License** | MIT |
-
-## What this is — and is not
-
-**Is:** a decision aid for the human, at the one moment a coding agent actually asks for input.
-
-**Is not:** an agent-loop gate. If you want Jev to restrict which tools are visible, assess a call
-before it runs, or route between models, use [@buberlo/dsh-jev](https://github.com/buberlo/dsh-jev) —
-it does that thoroughly, with shadow/enforce modes and benchmarks, and this plugin deliberately does
-not compete with it. Different table, different side of it.
-
-The trade is deliberate. An agent-loop gate has to be configured — providers, thresholds, tool
-categories, failure rules — and it only pays off once you have tuned it. This plugin has one moving
-part you have to supply (an API key) and it does something useful on the first question you are
-asked. That is the whole product.
-
-## What you actually see
-
-You ask the agent to do something. It stops and asks you to choose. Instead of guessing, you get:
-
-**Since 0.1.7, click “Ask Jev” first.** On-demand is the default, including upgrades. You can enable
-automatic advice under **Settings → Jev → Automatically get Jev advice** and save.
-
-- **the recommended option**, badged, with the probability Jev assigned to it;
-- **the rest of the distribution**, so you can see whether it was 80/20 or 51/49;
-- **Jev's confidence** in its own answer;
-- **trade-off perspective matrix (opt-in, adaptive 1–5 perspectives)** — automatically matches 2–4 perspectives to the question type (e.g. *Security & blast radius* vs. *Unblock task progress* for tool approvals, *Completeness & edge cases* / *Minimal code changes* / *Finish quickly* for plan reviews, or 4 perspectives for architecture decisions), and lets you freely add, remove, or type custom perspectives (`1..5`) right on the card or configure defaults in Settings, all evaluated in a single HTTP request;
-- **privileged tool approval & plan review second opinions** — risk/readiness score (`0..2`) and two-way one-click adoption (**Adopt: Allow once** / **Adopt: Reject**, or **Adopt: Request changes** via `dismiss()` when Jev rejects an approve-only plan);
-- **timed question auto-hold** — automatically pauses `ask_user_question` countdown timers (`takeTime` / `holdFocus`) while you evaluate or focus the Jev card;
-- **the exact request and response** behind the scenes, in a collapsible JSON block — nothing about
-  the recommendation is hidden from you;
-- **one button** that submits Jev's pick as if you had clicked it.
-
-Nothing is auto-applied. If you disagree, ignore the card and answer normally — the shipped question
-card is untouched and still works exactly as before.
-
-## Install
-
-Publishing to npm is **not required** — `dsh plugin` forwards to pnpm, so any spec pnpm can install
-works. Pick one; **do not mix them**, because two installs of the same package mount the loader entry
-and the API routes twice and fail the whole plugin tree.
-
-### Straight from the repository
+## Quick start
 
 ```bash
 dsh plugin --profile <your-profile> add github:gordan-code/dsh-jev-advisor
-# or the full form:
-dsh plugin --profile <your-profile> add git+https://github.com/gordan-code/dsh-jev-advisor.git
 ```
 
-This needs no build step on your machine because the repository **commits `lib/`**. pnpm only runs a
-`prepare` script for a git dependency, and blocks it until you allowlist the package in the profile's
-`pnpm-workspace.yaml`; shipping the built files avoids that entirely. `npm test` runs
-`scripts/build.mjs --check`, which fails when `lib/` drifts from `src/`.
+1. Open **Settings → Jev**, enter your TypeSafe API key, and save.
+2. When a supported interaction appears, click **Ask Jev**.
+3. Review the advice, then adopt it or answer through DSH's original controls.
+
+**Advice is on demand by default**, including upgrades without an explicit automatic-mode setting.
+To enable automatic requests, turn on **Settings → Jev → Automatically get Jev advice** and save.
+If **Require confirmation before sending** is enabled, either mode first shows a local preview;
+only **Confirm and send** calls Jev.
+
+## Features
+
+| Interaction | Advice and actions |
+| --- | --- |
+| Single-choice questions | Recommendation, option probabilities, confidence, and close-call warnings. Copy the suggested answer or adopt it. |
+| Multi-select questions | Evaluate each option separately; options with probability ≥ `0.5` form the suggested selection. |
+| Tool approvals | Suggest **Allow once** or **Reject**, with a risk score: `0` low, `1` moderate, `2` high. Adoption applies only to that invocation. |
+| Plan review | Evaluate the available options and show plan readiness: `0` needs revision, `1` has minor gaps, `2` ready to execute. For a single plan-review question, “none of the above” can be adopted as **Request changes** when DSH provides that action. |
+
+- **Trade-off perspectives (optional):** compare 1–5 perspectives alongside the main recommendation
+  in one Jev request. Defaults use the interaction type and keyword matching: for example,
+  security/task progress for approvals, or completeness/minimal changes/speed for plans.
+  Add, remove, or enter custom perspectives on the card; set persistent defaults in Settings.
+  Perspective comparisons apply to single-choice questions, not multi-select options.
+- **Temporary preference:** add a requirement such as “prioritize stability” for the current interaction.
+  Saving it before the first request makes no call. After evaluation starts, applying a change requests
+  a new evaluation, or a new local preview in confirmation mode.
+- **Timed questions:** when supported by DSH, starting an evaluation requests a countdown pause,
+  and focusing the card holds the question. A **Pause timer** button is also available while the
+  host reports an active countdown. This is best-effort, not a guarantee against expiry.
+- **Inspect and arrange:** view request/response JSON, dock left or right, collapse, or dismiss.
+  Docking and collapse state are saved per DSH profile.
+- **Local diagnostics:** check versions and effective settings, then copy sanitized diagnostic facts
+  without calling Jev.
+
+The card does not replace DSH's interaction UI, change the agent prompt, or enforce tool permissions.
+Scores and probabilities are model judgments, not safety guarantees. You make the final decision.
+
+## Install, update and remove
+
+Choose **one installation source**. Mounting the same package twice can cause duplicate loader entries
+and routes.
+
+### From GitHub
+
+```bash
+dsh plugin --profile <your-profile> add github:gordan-code/dsh-jev-advisor
+```
+
+The repository includes built `lib/` files; no local build is needed for installation.
+
+### From npm
+
+```bash
+dsh plugin --profile <your-profile> add dsh-jev-advisor
+# Pin a published release:
+dsh plugin --profile <your-profile> add dsh-jev-advisor@<published-version>
+```
+
+npm installs a published release, which may differ from this checkout. The package version alone
+does not identify a Git revision.
 
 ### From a local checkout
 
 ```bash
+node scripts/build.mjs
 dsh plugin --profile <your-profile> add /absolute/path/to/dsh-jev-advisor
 ```
 
-`link:` installs skip the build too — run `node scripts/build.mjs` after editing `src/`.
+Rebuild after editing `src/`; local links do not build automatically.
 
-### From npm
-
-Available on npm. Omitting a version installs the registry's current release, not necessarily
-the version in this checkout. Use `dsh-jev-advisor@<published-version>` to request an exact release;
-0.1.6 must be published before that exact version can be installed from npm.
-
-```bash
-dsh plugin --profile <your-profile> add dsh-jev-advisor
-```
-
-Then open **Settings → Jev** to paste your API key. Restart the host and refresh the page if DSH
-requests a restart or the plugin does not appear.
-
-### Update / uninstall
+### Update or uninstall
 
 ```bash
 dsh plugin --profile <your-profile> remove dsh-jev-advisor
+# To reinstall/update, add it again from your chosen source:
 dsh plugin --profile <your-profile> add github:gordan-code/dsh-jev-advisor
 ```
 
-A git install tracks the ref you asked for, so updating means re-running `add` (or `pnpm update`
-inside the profile directory). There is no semver range unless you write
-`github:gordan-code/dsh-jev-advisor#semver:^0.1.0`.
+Follow DSH's reload/restart instructions, then refresh the client. If the host bridge is outdated,
+restart the host **and** refresh the page. After rebuilding a local bundle, use a hard reload
+(`Ctrl+Shift+R`): the browser may retain an immutable cached bundle.
 
-On DSH 0.2.1-rc.2, replaceable plugin changes can take effect with hot reload enabled. Otherwise
-follow DSH's restart prompt. If the card reports an out-of-date host bridge, restart the host
-**and** refresh the browser; a page refresh alone does not replace host code. Check the installed
-version shown by DSH, especially when its release-age policy selects an older npm release.
+## Settings
 
-## Configure
+Open **Settings → Jev**. Save changes to apply them; leaving the key input blank preserves a stored key.
 
-**Settings → Jev**
-
-After saving your API key, wait for a multiple-choice question and click **Ask Jev**.
-To restore the old automatic behavior, enable **Automatically get Jev advice** and press **Save**.
-With confirmation enabled, either mode prepares a local preview first; only **Confirm and send** calls Jev.
-
-| Field | Default | Meaning |
+| Setting | Default | Meaning |
 | --- | --- | --- |
-| API key | *(empty)* | TypeSafe key from <https://console.typesafe.ai/keys>. `role('secret')` removes it from settings reads; it is never echoed back to the browser. The profile's Cordis patch stores it in plain text, not encrypted. |
+| API key | Empty | TypeSafe key from <https://console.typesafe.ai/keys>. Stored in the profile's Cordis patch in plain text; never returned in settings reads. |
 | Endpoint | `https://api.typesafe.ai/v1/systemone` | Evaluation endpoint. |
-| Model | `jev-latest` | Jev model or alias (`jev-1.13.0`, `jev-preview`, …). |
-| Enable Jev advice | on | Master switch. |
-| Automatically get Jev advice | **off** | `autoAdvise=false`, including upgrades. Off: click **Ask Jev**; on: eligible questions start evaluation automatically. Confirmation still applies; actual sending may incur API usage. Save to apply. |
-| Send the recent conversation as the state | on | Whether the transcript tail is attached as `state.context`. |
-| Require confirmation before sending | off | Optional local preview, independent of on-demand versus automatic mode. |
-| Mask common credentials before sending | on | Best-effort masking in outbound question/context text, not a complete privacy filter. |
-| Compare trade-off perspectives by default | off | When enabled (or toggled on the card), evaluates *stability*, *speed*, and *minimal diff* perspectives alongside the main choice in a single Jev request. |
-| Context messages | `12` | How many trailing transcript messages to include. |
+| Model | `jev-latest` | Jev model or alias. |
+| Enable Jev advice | On | Master switch. |
+| Automatically get Jev advice | **Off** | `autoAdvise=false`. Turn on to start advice automatically for supported interactions. Confirmation still applies; sending may incur API usage. |
+| Send the recent conversation as the state | On | Include the transcript tail as context. |
+| Require confirmation before sending | Off | Preview the outbound request locally before sending. |
+| Mask common credentials before sending | On | Best-effort masking of common credential patterns in outbound text. |
+| Compare trade-off perspectives by default | Off | Enable perspective comparisons; the card can override this for the current interaction. |
+| Default trade-off perspectives | Empty | Enter 1–5 labels separated by commas. Empty uses question-adaptive defaults. This does not enable comparison by itself. |
+| Context messages | `12` | Number of recent transcript messages to include. |
 | Timeout (ms) | `30000` | Total evaluation timeout, including response reading and retry backoff. |
 
-**Test connection** sends one trivial `noul` question and reports the model that answered, so you can
-verify a freshly pasted key without waiting for a real question.
-It uses the saved configuration and may incur API usage. It is not part of the free local health check.
+Card edits to perspectives and temporary preferences apply only to the current interaction;
+Settings defaults persist. Editing perspective labels alone does not send a request:
+save/apply the selection as indicated on the card.
 
-**Local health check** shows plugin/runtime versions, the declared DSH range and its match status,
-Key-configured and effective mode/privacy flags. It never calls Jev. Missing host metadata is **Unknown**,
-not “compatible”; matching a declaration does not guarantee every feature. **Copy sanitized diagnostics**
-copies only these allowlisted facts, never the key, endpoint, user paths, question text or full configuration.
-The runtime version comes from the host installation resolution table, never PATH or a guessed CLI.
+**Test connection** uses the saved settings to send a small Jev evaluation. It may incur API usage.
 
-The same values can be seeded from the cordis row's `config` (see `cordis.patch.yml`); user settings
-resolve above those defaults. Composition config supplies deployment defaults, not enforced policy.
+**Local health check** makes no Jev call. It shows the plugin and installed DSH versions, declared
+compatibility, key-configured status, and mode/privacy flags. Unavailable metadata is **Unknown**;
+a declaration match is not proof that every feature works. **Copy sanitized diagnostics** includes
+only allowlisted facts, excluding keys, endpoints, user paths, question text, and full configuration.
 
-## How it works
+## Privacy, cost and adoption safeguards
 
-| Half | File | Responsibility |
-| --- | --- | --- |
-| Host | `lib/index.js` | The `Config` schema (the settings source of truth), session transcript read, outbound TypeSafe call, four loopback-only JSON routes. |
-| Browser | `lib/client.js` | The floating advice card and the Settings → Jev section. |
+- The host sends the question, option text, optional transcript tail, and any explicit preference
+  or enabled perspectives to the configured endpoint. For tool approvals, it also includes approval
+  metadata and tool arguments when found in the session. **Turning off conversation context does
+  not remove these decision inputs.**
+- Credential masking covers common token/password assignments, Bearer tokens, `sk-…` keys,
+  private-key blocks, and URL credentials. It **cannot detect every secret or personal datum**.
+  Inspect the confirmation preview before sending sensitive content. Request/response JSON may
+  contain conversation data; do not share it as sanitized diagnostics.
+- Confirmation uses the exact local snapshot, valid for two minutes. Changes to request identity
+  or evaluation settings invalidate it. Preparation itself does not call Jev.
+- The complete evaluation JSON has a **64 KiB UTF-8** budget. Context is reduced first;
+  oversized decision inputs are rejected locally rather than silently cut.
+- One HTTP request can contain several evaluations. Perspective comparison can increase API usage;
+  one request does **not** mean one fixed-cost question. The card shows token usage when Jev returns it.
+- Identical concurrent evaluations share an upstream call within one host. Cancellation cannot
+  undo work already processed or guarantee a billing refund. Reopening a completed result reuses it;
+  reopening a cancelled request in on-demand mode waits for **Ask Jev**.
+- Answers are bound to the current session, interaction and request. Invalid, incomplete or stale
+  results cannot be adopted; double clicks cannot submit the same interaction twice.
+- Ordinary single-choice “none of the above” results require a manual answer. The plan-review
+  **Request changes** action described above is the exception. Multi-question adoption requires a
+  valid answer for every question; no empty answers are invented.
+- The four host routes (`status`, `test`, `prepare`, `advise`) require loopback connections and
+  same-origin browser requests. These checks do not isolate malicious processes running as the
+  same OS user. Use trusted profiles and protect the plaintext credential file.
 
-The two halves talk over same-origin `fetch` to the host's own webserver:
+## Compatibility and limitations
 
-| Route | Purpose |
+- `engines.dsh` declares **0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3**. Future runtimes are not
+  assumed compatible. Individual features depend on the host's public interaction APIs.
+- The card follows the main session's pending interaction; only when that session has none does
+  it fall back to another supported pending interaction. Historical or closed interactions are excluded.
+- Free-text-only questions are not supported. A mixed batch containing unsupported questions
+  cannot be adopted as a complete batch.
+- The card uses `shell.overlay` and `settings.section`. Sidebar avoidance is manual; switch sides
+  or collapse the card if it overlaps another panel.
+- Context is capped at roughly 24,000 characters and may be shortened further by the byte budget.
+  Only overload responses `429` and `529` are retried, at most twice.
+
+## Troubleshooting
+
+| Symptom | What to check |
 | --- | --- |
-| `POST /dsh-jev-advisor/api/status` | `{ enabled, hasKey, endpoint, model, … }` — connection facts without the key. |
-| `POST /dsh-jev-advisor/api/test` | One trivial evaluation, for the *Test connection* button. |
-| `POST /dsh-jev-advisor/api/prepare` | Prepare an exact local request snapshot and a short-lived confirmation token; no Jev call. |
-| `POST /dsh-jev-advisor/api/advise` | Build the structured request for a pending question batch, call Jev, map the answer back onto option labels. |
-
-All four require both a real loopback TCP peer and a loopback authority, and defer to `ctx.connection.requestRejection` when the
-Connection service is mounted. A supplied browser `Origin` must match the actual protocol, hostname
-and port; cross-site and same-site-but-not-same-origin Fetch Metadata are rejected. Local diagnostic
-clients without an `Origin` remain supported. Every POST requires `Content-Type: application/json`;
-only `/status` also accepts GET. GET cannot trigger a paid evaluation.
-
-### Why a floating card and not a modified question card?
-
-`conversation.composer` is a **chain** slot: it elects exactly one entry, and the shipped question
-composer always wins for a pending question. Replacing it would mean reimplementing the whole
-question UI and breaking every question shape this plugin does not model. `shell.overlay` is the
-documented additive seat for a frame-wide surface, so the advice card renders *beside* the shipped
-composer and reads pending interactions from `useSessionStatus`. Since this slot is root-scoped,
-it subscribes separately to the public `uiSession.adapter.current` binding to follow the main Session.
-
-## Decisions worth knowing
-
-**Multi-select questions** fan out into one `noul` question per option ("should this option be
-selected?"), because Jev has no multi-label primitive. Options at or above `0.5` are the recommended
-selection.
-
-**A "none of the above" option is always offered to Jev** for single-choice questions. If it picks
-that, the card says so and disables adoption — you write the answer yourself, because Jev has
-told you the option list is wrong, not which option is right.
-
-**Adoption is all-or-nothing.** Submitting an answer batch answers *every* question in it. If Jev has
-no decisive answer for one of them — or a question has no options at all — the button stays disabled
-and the card says so, rather than silently submitting an empty answer for the rest.
-
-### Correctness safeguards (0.1.5)
-
-- Evaluation keys are generated per decision (`decision_0`, `decision_1_opt_0`, …), independently
-  of the original question IDs. Multiple multi-select questions cannot overwrite each other;
-  answers still use the exact original IDs and option labels.
-- Missing or wrong-type answers, unknown choices, incomplete probability distributions, and
-  probabilities or supplied confidence outside `[0, 1]` block adoption. Missing multi-select
-  answers are not interpreted as a negative vote. If every option is below `0.5`, no fallback
-  option is invented and the question stays manual.
-- Choice probability mass must be within `0.01` of 1 (rounding tolerance); a zero-probability
-  selection is never adoptable. Nested advice records are validated before rendering.
-- Advice is bound to the session, interaction key and full question contents. Replaced interactions
-  hide old advice immediately, ignore late responses and reject stale submit handlers. Double clicks
-  cannot submit the same interaction twice; a failed submission can be retried.
-- Each browser evaluation carries a fresh request ID. The host echoes it together with the session,
-  interaction key and question contents; the browser rejects mismatched or replayed response payloads.
-- Duplicate question IDs and ambiguous option labels are rejected. Malformed request bodies return
-  `400`, oversized bodies `413`, unsupported content types `415`, and disallowed methods `405`.
-
-### Host integration and settings (0.1.5)
-
-- The main Session's pending interaction takes priority over Map insertion order. If the main
-  Session has no pending interaction, the card falls back to the first option-bearing question;
-  a current approval stays with its own UI instead of displaying background advice over it.
-- Saving settings validates the complete draft, then calls `ConfigFormController.mutate` once with
-  the observed revision. A rejected write retains the draft and shows an error instead of "Saved".
-  Loading, unavailable and read-only forms cannot save or clear credentials. Values typed during a
-  pending save are retained; an empty key input does not clear a stored key.
-- Saving, clearing the key, and testing the connection are synchronously mutually exclusive.
-  Key clearing uses a revision-bound atomic mutation and preserves a newer key draft typed while
-  waiting. Unmounting aborts status/probe requests and suppresses late UI updates and follow-up
-  requests; it cannot undo a configuration write already submitted to the host.
-  A draft containing only a blank key shows clear-key guidance instead of a false "Saved" message.
-- Binding mismatch diagnostics contain only comparison flags, not question text or a global
-  conversation trace. The request ID, Session and interaction checks remain strict.
-
-### Privacy, layout and cost control (0.1.5)
-
-- On-demand advice is the default in 0.1.7. Enable **Require confirmation before sending** to inspect
-  the exact outbound JSON before pressing **Confirm and send**. Preparation stays on the local
-  host. Confirmation uses that snapshot, not a newer transcript. Previews expire after two minutes;
-  changing settings or request identity invalidates them. At most 32 previews are retained in memory.
-- Common credential masking is on by default and applies to question/option/context text before
-  transmission. It recognizes common password/token assignments, Bearer tokens, `sk-…` keys, private
-  key blocks and URL credentials. **It cannot identify every secret or personal datum.** Disable
-  transcript inclusion or use confirmation mode for sensitive conversations. Original option labels
-  remain unchanged when submitting an answer to DSH.
-- The complete evaluation JSON has a local **64 KiB UTF-8** budget. Context is reduced first;
-  oversized questions/options return `413` without a Jev call, rather than being silently cut.
-  This budget is not a token estimate or a guarantee of the upstream service's acceptance.
-- Identical concurrent evaluations in the same host instance share one call, while each response
-  keeps its own request ID. Completed host results are not cached, so an explicit retry stays fresh.
-  Closing or switching an active request cancels its subscription; the upstream is aborted when no
-  subscribers remain. Cancellation cannot undo work already processed or guarantee a billing refund.
-- The card displays actual token usage when supplied by Jev, not a guessed currency price. The
-  default position is left; switch sides to avoid a sidebar, collapse it, or dismiss and reopen it.
-  Reopening a completed card does not request another evaluation; reopening a cancelled load does.
-
-### Decision helpers (0.1.5)
-
-- **Close-call warnings:** a single-choice recommendation within 10 percentage points of its
-  strongest alternative (including “none of the above”) gets a probability-gap notice. Multi-select
-  options near the `0.5` cutoff are marked as borderline. These are observations of Jev's reported
-  scores, not calibrated correctness guarantees; they do not automatically submit or prohibit answers.
-  A recommendation scored below another option gets a separate warning rather than a “clear winner” label.
-- **Copy without adopting:** copy a complete, valid suggested answer batch as readable text, keeping
-  original question and option wording. Copying does not submit answers or request another evaluation.
-  Incomplete, invalid and “none of the above” batches cannot be copied as if they were full answers.
-- **Remember layout (updated in 0.1.6):** docking and collapse state are saved as `cardDock` and
-  `cardCollapsed` in this plugin's current DSH profile. They survive browser-port changes and are
-  shared by browsers connected to that profile, but not by unrelated profiles. Only these layout
-  fields are written; temporary preferences, question text and responses are not saved as layout.
-  A legacy same-origin browser preference is migrated when no profile layout has been saved; it
-  cannot be recovered from an old port the browser can no longer access. Rejected or read-only
-  writes keep the current mounted card's layout and show a notice; adjusting it retries the save.
-  Confirmed layout writes from this card do not request another Jev evaluation or invalidate an
-  existing preview. Unrecognized revisions from another window are conservatively treated as
-  configuration changes, since a hidden API key may have changed in the same atomic write.
-- **Temporary decision preference:** enter a short preference such as “prioritize stability”, “finish
-  quickly” or “minimize code changes”, then click **Apply and reevaluate**. Typing alone makes no call.
-  The text is limited to 500 UTF-16 code units and applies only to the current interaction; switching
-  questions clears it. Applying or clearing an active preference requests a new evaluation (or a new
-  local preview in confirmation mode). It does not change the agent prompt or persist to DSH settings.
-  An explicit preference is sent even when transcript inclusion is off; credential masking and the
-  full-request byte budget still apply. Changing it invalidates an old preview/advice identity.
-  Before the first on-demand request, **Save preference for this question** only stores it in memory;
-  click **Ask Jev** to use it. Once evaluation has started, **Apply and re-evaluate** explicitly requests a new evaluation.
-
-The previously staged correctness, host integration and privacy improvements are included in this
-single **0.1.5** update from 0.1.4; intermediate development version labels were not release versions.
-
-### DSH compatibility patch (0.1.6)
-
-- Declares the exact supported DSH runtimes `0.2.0-rc.2` and `0.2.1-rc.2` through `engines.dsh`.
-  Future releases are not assumed compatible; expand this declaration only after verification.
-- Observes the public question-card snapshot as well as Session status. `waterfall` and continued
-  `rpc` answers remain available; closed, historical-review and temporarily channel-less questions
-  do not request advice or accept stale adoption events.
-  The root overlay subscribes directly to the public main-Session binding, even when the Session
-  status Map itself is unchanged. Browser fixtures do not supply that subscription on its behalf.
-- Covers overlay remount, cancelled requests, preview replacement, queued layout writes, async
-  settings saves and key clearing. A write already accepted by the host cannot be undone on unmount.
-- Keeps outbound credential masking. DSH's message-display masking is not outbound redaction and
-  does not replace this plugin's own controls. The loopback-only trust boundary is unchanged;
-  remote hosts and reverse-proxy path prefixes are not added by this patch.
-
-### On-demand advice, diagnostics and DSH rc.3 (0.1.7)
-
-- **Behavior change:** automatic advice is now opt-in, including upgrades. A missing `autoAdvise`
-  setting means false; an explicitly enabled value remains enabled. Reload or restart the host as instructed and refresh the client after updating the plugin.
-- New questions and evaluation-affecting settings changes invalidate manual authorization and return to **Ask Jev**.
-  Cancelling a load and reopening does not resume it automatically; reopening a completed result reuses it.
-- Adds the visible automatic-mode switch, usage disclosure and local sanitized diagnostics described above.
-- Retains the explicit `engines.dsh` requirement and adds verified `0.2.1-rc.3` support.
-- Keeps `0.2.0-rc.2` and `0.2.1-rc.2` support; unverified future runtimes remain outside the declaration.
+| No advice card | A supported interaction must be pending, advice must be enabled, and the client bundle and host routes must be loaded. |
+| No request starts | On-demand mode requires **Ask Jev**. Confirmation mode also requires **Confirm and send**. |
+| No API key / `401` | Save a valid TypeSafe key in Settings → Jev. |
+| `422` | Inspect the local request; report the error code and byte size without keys or conversation text. |
+| `429` / `529` | Rate limited or overloaded; retry after the two automatic retries finish. |
+| Host bridge outdated / stale UI | Restart the host and hard-reload the page. Verify the installed source/version. |
+| Advice for a different request | Restart and refresh. If it persists, report only the comparison flags, not request contents. |
+| Duplicate loader entry | Remove the duplicate installation or bundle entry. |
 
 ## Development
 
 ```bash
-npm ci                     # test dependencies; no real API keys needed
-node scripts/build.mjs     # src/*.js -> lib/*.js (+ type stubs)
-npm test                   # lib/ freshness, request building, client wiring
-npm run check:pack         # the DSH packaging gate (see below)
+npm ci
+npm run build
+npm test
+npm run check:pack
 npx playwright install chromium
-npm run test:browser       # real Chromium + React DOM, isolated service fixtures
-npm run test:host          # real DSH CLI, isolated scratch home (see below)
-npm run test:install       # actual npm .tgz, offline install, real isolated host
-npm run quality            # build -> base -> browser -> pack -> host -> install
-npm pack --dry-run         # confirm the published file list
+npm run test:browser
+npm run test:host
+npm run test:install
+npm run quality
+npm pack --dry-run
 ```
 
-`.github/workflows/ci.yml` runs `npm ci`, `npm test`, and `check:pack` on Node 20, 22, and 24.
-Three Node 24 quality jobs run the same unified gate with Chromium and separately pinned DSH
-0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3.
-`npm test` also covers adversarial answer mapping, route rejection paths, deterministic hook/effect
-lifecycle tests, and a real loopback HTTP bridge-to-mock round trip. Those tests need no real API key
-and write no request dumps into the repository.
+`lib/` is committed. `npm test` checks it matches `src/`; `check:pack` verifies published entry points,
+the client bundle, and `cordis.patch.yml`.
 
-Two gates exist because this package can be broken in ways a unit test cannot see:
-
-- **`npm test` starts with `scripts/build.mjs --check`.** `lib/` is committed (a git install runs no
-  build), so a `src/` edit without a rebuild would ship stale code. The check compares the two
-  byte for byte.
-- **`check:pack` asserts the DSH-specific packaging invariants.** `lib/client.js` and
-  `cordis.patch.yml` both fail *silently* when missing: the first means the plugin installs and no UI
-  ever appears, the second means `dsh plugin add` never appends the bundle and the plugin is never
-  mounted at all. The gate checks they exist, that `files` actually covers them, and that every entry
-  point `package.json` advertises resolves.
-
-`test:browser` uses Playwright 1.59.1 (development-only), real Chromium, and React DOM with isolated
-service fixtures. It covers main-session switching, late responses, dismiss/retry, answer adoption,
-and atomic/rejected/async settings writes, key clearing and settings unmount cancellation.
-It is not a full DSH Desktop UI test.
-
-`test:host` starts the real DSH CLI with a random temporary `DSH_HOME`, scratch profile, random
-loopback ports, and an in-memory TypeSafe mock. It checks the mounted routes, request binding,
-correct/wrong/missing keys, HTTP rejection paths, official settings Remote writes, and persisted
-layout after a real process restart. Separate lifecycle checks cover route/evaluation/preview
-cleanup and failed-start cleanup. These are not full Desktop hot-reload UI tests. It removes its
-temporary profile. It never uses a real Jev key or the user's DSH profile. Set `DSH_TEST_CLI` to a
-pinned CLI entry point (or install that CLI where module resolution can find it); no PATH-based
-fallback is used. For example, in PowerShell:
+Host/install tests need a pinned real DSH CLI. For example, in PowerShell:
 
 ```powershell
-$env:DSH_TEST_CLI = "<temporary-cli-directory>/node_modules/@deepseek-ai/dsh/lib/bin.js"
-npm run test:host
+$env:DSH_TEST_CLI = "<cli-directory>/node_modules/@deepseek-ai/dsh/lib/bin.js"
 npm run quality
 ```
 
-`test:install` packs the already-built artifacts into a real `.tgz` under a temporary directory,
-then runs `npm install --offline --ignore-scripts` in a fresh scratch profile with an empty npm
-cache and an unreachable registry. Peer dependencies and their required dependency closure are
-packed locally from the versions installed by `npm ci`, checked against `package-lock.json`, and
-installed as real tarballs alongside the plugin. npm still validates peer ranges; there is no
-`--legacy-peer-deps`, online fallback, source link, or dependency on registry metadata caching.
-This verifies packaging/loading against the locked peer fixture, not live registry availability. The test loads
-the package's shipped `cordis.patch.yml` through the profile bundle stack, checks live host advice,
-and verifies the installed client is in DSH's boot graph and is served as a valid client module.
-The plugin directory is asserted to contain real installed files, not a junction, and all owned
-processes, tarballs and temporary profiles are cleaned up. No real key or user profile is used.
+`quality` runs build, base tests, Chromium, packaging, isolated-host tests, and tarball installation.
+Missing prerequisites fail the gate. Tests use mocks and scratch profiles, not real Jev keys or your
+DSH profile. Chromium fixtures are not a full Desktop UI test. CI additionally runs Node 20/22/24
+checks and a pinned three-runtime DSH quality matrix.
 
-`quality` stops at the first failure and requires Chromium plus the real CLI configured above;
-missing prerequisites are failures, not skipped checks. It ignores the development-only
-`DSH_CLIENT_SOURCE` switch so release verification always tests `lib/`. It does not publish or
-commit anything. `npm ci`, the Chromium installation and the pinned CLI installation are setup
-steps, not automatically performed against a user's profile by the gate.
-
-CI installs each pinned DSH runtime under the runner's temporary directory. Local verification
-also uses isolated scratch profiles; GitHub CI still needs to run after these changes are pushed.
-
-For a manual probe of an **already running scratch host configured to the local mock**, pass its
-tokenized launch URL as `DSH_E2E_BASE` or `node test/e2e.mjs <tokenized-url>`. The mock CLI accepts
-`node test/mock-typesafe.mjs 0` to choose a free port and records requests only in memory by default.
-Optional `DSH_E2E_DUMP` reads an explicitly supplied dump; optional `DSH_E2E_BADKEY_BASE` points to
-a separate wrong-key scratch host. Without that second host, the manual probe explicitly skips the
-wrong-key check instead of claiming it passed. The automated host suite always checks it.
-
-The plugin is plain JavaScript: the host half is Node ESM, the browser half is already in the
-`__ModuleLoader__.load({ id, factory })` lazy-CJS form the DSH client module system expects. There is
-nothing to transpile, so `lib/` is a straight copy of `src/` — and it is **committed**, because a git
-install runs no build.
-
-For the browser half, only the platform seed modules may be `require`d (`react`,
-`react/jsx-runtime`, `react-dom`, `@deepseek-ai/cordis`, `@deepseek-ai/dsh-client-store`,
-`@deepseek-ai/dsh-client-ui-slots`, `@deepseek-ai/dsh-client-ui-primitives`,
-`@deepseek-ai/dsh-client-ui-dockkit`). Cross-plugin collaboration goes through cordis services
-(`ctx.slots`, `ctx.locale`, `ctx.configForms`, `ctx.uiSession`) or the host HTTP bridge — never through another
-plugin's internals.
-
-## Troubleshooting
-
-| Symptom | Cause |
-| --- | --- |
-| Card never appears | No pending question, Jev advice is off, or the host route is unreachable. Check `/dsh-jev-advisor/api/status` returns `{"ok":true,...}`. |
-| `no Jev API key is configured` | Save a key in Settings → Jev. |
-| `Jev responded 401` | The key is invalid or revoked. |
-| `Jev responded 422` | Inspect the local request JSON. Report the error code and request byte size first; do not share keys or conversation text. |
-| `Jev responded 429 / 529` | Rate limited or overloaded; the plugin retries twice with backoff, then gives up. |
-| `host bridge is out of date` | The browser loaded the new client while the host still runs old code. Restart the DSH host process, then refresh the browser; retrying or refreshing alone cannot reload the host. |
-| `returned advice for a different request` | The echoed request identity or question contents do not match. Object key ordering is ignored, but question and option order still matter. If it persists after a host restart and browser refresh, report only the `reqIdMatch`, `sessionMatch`, `keyMatch`, and `questionsMatch` flags, not keys or conversation text. |
-| Card still shows an old UI after you rebuilt `lib/` | The page loaded the plugin bundle at boot and keeps executing it; bundles are served with a one-year `immutable` cache, so an ordinary refresh can reuse the stale copy. Hard-reload (`Ctrl+Shift+R`) after rebuilding — restarting the host alone does not replace module code already injected into the page. |
-| Settings section missing | The client bundle did not load. Confirm `dsh.client` is present in `node_modules/dsh-jev-advisor/package.json` and that `lib/client.js` shipped. |
-| `duplicate loader entry id` at boot | The package is mounted twice — two installs, or an aggregate bundle mounting it too. Remove one. |
-
-## Known limitations
-
-- **Supports DSH 0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3.** Requires Config-backed settings,
-  `ConfigForm.mutate`, `uiSession.adapter.current` and public question-card snapshots. There is no
-  legacy `settingsScope` fallback. Full-host tests pin all three runtimes rather than using PATH's `dsh`.
-- Sidebar avoidance is manual (left/right docking), not private-DOM detection. A wide host panel can
-  still overlap the card; switch sides or collapse/dismiss it. Narrow-screen overflow is covered by
-  Chromium tests, but a full DSH Desktop visual test has not been automated.
-- With more than one session holding a pending question at once, the card follows the current
-  session and falls back to the first option-bearing pending interaction when the main Session has none.
-- Plan-review questions are advised like any other option-bearing question; the card never replaces
-  the approve/refuse buttons.
-- The API key round-trips to the host process, which is what performs the HTTPS call. It is never
-  returned to the browser, but it is stored in plain text in your profile's Cordis patch — protect
-  that file as you would any credential.
-- Loopback restrictions do not isolate malicious processes running as the same OS user. Use trusted
-  DSH profiles. Request binding prevents stale response use; it is not per-session authorization.
-- The transcript tail is capped at ~24k characters and may be shortened further by the full-request
-  byte budget. Usage is per evaluation; shared results must not be counted as separate charges.
-- No retry beyond the two documented overload codes (`429`, `529`).
-
-## Prior art, and why this package is not called `dsh-jev`
-
-`dsh-jev` is taken on npm (`zhangxaochen/dsh-jev`, v0.2.0) and at least five GitHub repositories
-share the name, so this one is namespaced `dsh-jev-advisor` — and every identifier it owns
-(settings entry id, API route prefix, locale namespace, loader entry id) is namespaced to match. It
-can therefore sit beside those plugins without a duplicate-entry boot failure.
-
-The Jev plugins already out there are worth your attention:
-
-| Project | What it does |
-| --- | --- |
-| [Devin-AXIS/jev-dsh-decision](https://github.com/Devin-AXIS/jev-dsh-decision) | Structured decision engine for agent harnesses; DSH-native plus OpenCode/Codex through iPolloWork |
-| [buberlo/dsh-jev](https://github.com/buberlo/dsh-jev) | Jev bound to the agent loop: tool preselection, per-call assessment, model and skill routing |
-| [noetion/dsh-jev](https://github.com/noetion/dsh-jev) | A `jev_ask` tool for noul, choice and score answers |
-
-They put Jev inside the agent's decision-making. This one puts it in yours. If you want both, they do
-not conflict — that is what the namespacing above is for.
-
-Jev is a product of TypeSafe AI. This project is not affiliated with or endorsed by TypeSafe AI,
-DeepSeek, or any of the projects listed above.
+The host uses `ctx.sessions` and loopback JSON routes; the browser uses public Cordis services
+(`ctx.slots`, `ctx.locale`, `ctx.configForms`, `ctx.uiSession`). It does not import other plugins'
+private implementation.
 
 ## License
 
-MIT
+MIT. Jev is a TypeSafe AI product. This project is not affiliated with or endorsed by TypeSafe AI or DeepSeek.

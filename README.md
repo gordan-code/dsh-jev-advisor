@@ -45,6 +45,9 @@ automatic advice under **Settings → Jev → Automatically get Jev advice** and
 - **the recommended option**, badged, with the probability Jev assigned to it;
 - **the rest of the distribution**, so you can see whether it was 80/20 or 51/49;
 - **Jev's confidence** in its own answer;
+- **trade-off perspective matrix (opt-in, adaptive 1–5 perspectives)** — automatically matches 2–4 perspectives to the question type (e.g. *Security & blast radius* vs. *Unblock task progress* for tool approvals, *Completeness & edge cases* / *Minimal code changes* / *Finish quickly* for plan reviews, or 4 perspectives for architecture decisions), and lets you freely add, remove, or type custom perspectives (`1..5`) right on the card or configure defaults in Settings, all evaluated in a single HTTP request;
+- **privileged tool approval & plan review second opinions** — risk/readiness score (`0..2`) and two-way one-click adoption (**Adopt: Allow once** / **Adopt: Reject**, or **Adopt: Request changes** via `dismiss()` when Jev rejects an approve-only plan);
+- **timed question auto-hold** — automatically pauses `ask_user_question` countdown timers (`takeTime` / `holdFocus`) while you evaluate or focus the Jev card;
 - **the exact request and response** behind the scenes, in a collapsible JSON block — nothing about
   the recommendation is hidden from you;
 - **one button** that submits Jev's pick as if you had clicked it.
@@ -126,6 +129,7 @@ With confirmation enabled, either mode prepares a local preview first; only **Co
 | Send the recent conversation as the state | on | Whether the transcript tail is attached as `state.context`. |
 | Require confirmation before sending | off | Optional local preview, independent of on-demand versus automatic mode. |
 | Mask common credentials before sending | on | Best-effort masking in outbound question/context text, not a complete privacy filter. |
+| Compare trade-off perspectives by default | off | When enabled (or toggled on the card), evaluates *stability*, *speed*, and *minimal diff* perspectives alongside the main choice in a single Jev request. |
 | Context messages | `12` | How many trailing transcript messages to include. |
 | Timeout (ms) | `30000` | Total evaluation timeout, including response reading and retry backoff. |
 
@@ -407,6 +411,7 @@ plugin's internals.
 | `Jev responded 429 / 529` | Rate limited or overloaded; the plugin retries twice with backoff, then gives up. |
 | `host bridge is out of date` | The browser loaded the new client while the host still runs old code. Restart the DSH host process, then refresh the browser; retrying or refreshing alone cannot reload the host. |
 | `returned advice for a different request` | The echoed request identity or question contents do not match. Object key ordering is ignored, but question and option order still matter. If it persists after a host restart and browser refresh, report only the `reqIdMatch`, `sessionMatch`, `keyMatch`, and `questionsMatch` flags, not keys or conversation text. |
+| Card still shows an old UI after you rebuilt `lib/` | The page loaded the plugin bundle at boot and keeps executing it; bundles are served with a one-year `immutable` cache, so an ordinary refresh can reuse the stale copy. Hard-reload (`Ctrl+Shift+R`) after rebuilding — restarting the host alone does not replace module code already injected into the page. |
 | Settings section missing | The client bundle did not load. Confirm `dsh.client` is present in `node_modules/dsh-jev-advisor/package.json` and that `lib/client.js` shipped. |
 | `duplicate loader entry id` at boot | The package is mounted twice — two installs, or an aggregate bundle mounting it too. Remove one. |
 

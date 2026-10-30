@@ -88,6 +88,13 @@ function harness(t) {
 	  unmount() { for (const slot of slots) slot?.cleanup?.() },
     setInteraction(value) { interaction = value },
     body: () => find(tree, (node) => node.type === internals.JevAdviceBody)?.props,
+    preview: () => find(tree, (node) => node.type === internals.JevPrepareBody)?.props,
+    confirmButton() {
+      const preview = find(tree, (node) => node.type === internals.JevPrepareBody)?.props
+      if (preview === undefined) return undefined
+      const rendered = internals.JevPrepareBody(preview)
+      return find(rendered, (node) => node.type === 'button' && node.props.children.includes('panel.confirm'))?.props
+    },
     error: () => find(tree, (node) => node.props.key === 'error')?.props.children.join(''),
     canRetry: () => Boolean(find(tree, (node) => node.type === 'button' && node.props.children.includes('panel.retry'))),
     close: () => find(tree, (node) => node.type === 'button' && node.props.title === 'panel.dismiss').props.onClick(),
@@ -129,6 +136,32 @@ test('按需确认模式点击前无 prepare，点击后仅准备预览', async 
   h.button('panel.ask').onClick(); h.render()
   assert.equal(h.requests.length, 1)
   assert.match(h.requests[0].url, /\/prepare$/)
+})
+
+test('确认模式预览态只给确认按钮，确认后把 previewToken 发给 advise', async t => {
+  const h = harness(t)
+  Object.assign(h.snapshot.value, { autoAdvise: false, requireConfirmation: true })
+  h.setInteraction(interaction('confirm-send')); h.render()
+  h.button('panel.ask').onClick(); h.render()
+  assert.match(h.requests[0].url, /\/prepare$/)
+  h.requests[0].respond({
+    previewToken: 'preview-token-1',
+    request: { model: 'jev-latest' },
+    privacy: { includedTranscript: false, contextChars: 0, redactions: 0, truncated: false, requestBytes: 128 },
+    expiresAt: '2026-10-30T22:05:00.000Z',
+  })
+  await h.settle()
+  assert.ok(h.confirmButton(), '预览态给出「确认发送」按钮')
+  assert.equal(h.body(), undefined, '预览态不渲染任何建议内容')
+  assert.equal(h.preview().value.previewToken, 'preview-token-1')
+  h.confirmButton().onClick(); h.render()
+  assert.equal(h.requests.length, 2, '确认后才发第二次请求')
+  assert.match(h.requests[1].url, /\/advise$/)
+  const sent = JSON.parse(h.requests[1].options.body)
+  assert.equal(sent.previewToken, 'preview-token-1')
+  assert.equal(sent.sessionId, 'session-a')
+  h.requests[1].respond(value); await h.settle()
+  assert.equal(h.body().adoptable, true, '确认后建议才可采纳')
 })
 
 test('未询问的 A→B→A 也不能复用第一次 A 捕获的询问事件', t => {

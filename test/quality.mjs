@@ -15,10 +15,10 @@ test('浏览器质量任务固定 Playwright 支持的 Ubuntu 24.04，不跟随 
   assert.ok(quality.includes('      - run: npm run quality'))
 })
 
-test('0.1.7 仅声明已验证的 DSH 候选版本，并同步锁文件版本', async () => {
+test('0.2.0 仅声明已验证的 DSH 候选版本，并同步锁文件版本', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'))
-  assert.equal(manifest.version, '0.1.7')
+  assert.equal(manifest.version, '0.2.0')
   assert.equal(manifest.engines.dsh, '0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3')
   assert.equal(lock.version, manifest.version)
   assert.equal(lock.packages[''].version, manifest.version)

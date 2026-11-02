@@ -1,6 +1,6 @@
 {
   "name": "dsh-jev-advisor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Jev (TypeSafe System One) gives the human a second opinion, not the agent. When DSH's model asks you a multiple-choice question, dsh-jev-advisor builds a structured Jev request and floats the recommendation, probability spread and confidence beside the options - one click to adopt. API key lives in Settings. No prompt changes.",
   "keywords": [
     "dsh",
@@ -52,7 +52,7 @@
   ],
   "engines": {
     "node": ">=20",
-    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3"
+    "dsh": ">=0.2.0-rc.2"
   },
   "dsh": {
     "bundle": {

@@ -21,12 +21,18 @@ test('诊断仅信任 installation 解析表，声明匹配不等于功能保证
   const report = host.diagnosticsOf(context('0.2.1-rc.3'), { enabled: true, autoAdvise: false, apiKey: 'private-key' })
   assert.equal(report.pluginVersion, manifest.version)
   assert.equal(report.dshVersion, '0.2.1-rc.3')
-  assert.equal(report.declaredDsh, manifest.engines.dsh)
+  assert.equal(report.declaredDsh, '>=0.2.0-rc.2', '声明为无上限下限，宿主升级不必跟版')
   assert.equal(report.declarationMatch, 'match')
   assert.equal(report.hasKey, true)
   assert.equal(report.autoAdvise, false)
-  assert.equal(host.diagnosticsOf(context('0.2.1-rc.4'), {}).declarationMatch, 'mismatch')
-  assert.equal(host.diagnosticsOf(context('0.2.1-rc.3+local'), {}).declarationMatch, 'match', '与 npm semver 精确版本一致，忽略 build metadata')
+  // 无上限下限：当前与未来任意宿主版本都判为匹配，宿主升级后无需改版本号重发。
+  for (const version of ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.2', '0.3.0', '1.0.0', '1.2.0-beta.1', '0.2.1-rc.3+local']) {
+    assert.equal(host.diagnosticsOf(context(version), {}).declarationMatch, 'match', `${version} 落在 >=0.2.0-rc.2 之内`)
+  }
+  // 低于下限的宿主仍如实报告不匹配（下限是真实的最低要求，不是“永远通过”）。
+  for (const version of ['0.2.0-rc.1', '0.1.9']) {
+    assert.equal(host.diagnosticsOf(context(version), {}).declarationMatch, 'mismatch', `${version} 低于声明下限`)
+  }
   for (const ctx of [{}, context('0.2.1-rc.3', 'profile'), context('C:/private'), { get() { throw Error('private-token') } }]) {
     const value = host.diagnosticsOf(ctx, {})
     assert.equal(value.dshVersion, null)
@@ -43,6 +49,13 @@ test('浏览器诊断复制再次投影白名单，旧宿主和异常元数据�
   assert.equal(/secret|private|password|endpoint|sessionId/.test(JSON.stringify(report)), false)
   assert.equal(client.publicDiagnostics(undefined).declarationMatch, 'unknown')
   assert.equal(client.publicDiagnostics({ pluginVersion: 'secret', dshVersion: 'C:/private', declaredDsh: 'secret', declarationMatch: 'match' }).declarationMatch, 'unknown')
+  // 浏览器半独立复算下限：声明形态之外的文本一律退回未知。
+  const projected = client.publicDiagnostics({ dshVersion: '1.0.0', declaredDsh: '>=0.2.0-rc.2' })
+  assert.equal(projected.declaredDsh, '>=0.2.0-rc.2')
+  assert.equal(projected.declarationMatch, 'match')
+  assert.equal(client.publicDiagnostics({ dshVersion: '0.2.0-rc.1', declaredDsh: '>=0.2.0-rc.2' }).declarationMatch, 'mismatch')
+  assert.equal(client.publicDiagnostics({ dshVersion: '1.0.0', declaredDsh: '>=0.2.0 <0.3.0' }).declarationMatch, 'unknown')
+  assert.equal(client.publicDiagnostics({ dshVersion: '1.0.0', declaredDsh: '>=0.2.0-rc.2 || 1.0.0' }).declarationMatch, 'unknown')
 })
 
 test('设置写入接受 autoAdvise 布尔，拒绝字符串，不拆分原子写入', async () => {

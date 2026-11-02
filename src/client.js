@@ -2031,16 +2031,59 @@ window.__ModuleLoader__.load({
 			)
 		}
 
+		const exactDshVersion = value => typeof value === 'string' && value.length <= 100
+			&& /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(value) ? value : null
+
+		/** 本包唯一公开的 DSH 声明形态：无上限下限 `>=X`。宿主半保持同一语义。 */
+		const declaredFloor = value => {
+			if (typeof value !== 'string' || value.length > 100) return null
+			const match = /^>=\s*(\S+)$/.exec(value.trim())
+			return match === null ? null : exactDshVersion(match[1])
+		}
+
+		/** semver 优先级比较，只用于下限判定；构建元数据不参与比较。 */
+		const compareDshVersions = (left, right) => {
+			const parse = value => {
+				const bare = value.split('+')[0]
+				const at = bare.indexOf('-')
+				return { nums: (at < 0 ? bare : bare.slice(0, at)).split('.').map(Number), pre: at < 0 ? [] : bare.slice(at + 1).split('.') }
+			}
+			const a = parse(left), b = parse(right)
+			for (let i = 0; i < 3; i += 1) if (a.nums[i] !== b.nums[i]) return a.nums[i] < b.nums[i] ? -1 : 1
+			if (a.pre.length === 0 || b.pre.length === 0) return a.pre.length === b.pre.length ? 0 : a.pre.length === 0 ? 1 : -1
+			for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i += 1) {
+				const x = a.pre[i], y = b.pre[i]
+				if (x === undefined) return -1
+				if (y === undefined) return 1
+				if (x === y) continue
+				const numeric = /^\d+$/.test(x), other = /^\d+$/.test(y)
+				if (numeric && other) return Number(x) < Number(y) ? -1 : 1
+				if (numeric) return -1
+				if (other) return 1
+				return x < y ? -1 : 1
+			}
+			return 0
+		}
+
+		/** 声明判定：`>=X` 下限或 `||` 组合的精确版本，其余形态保持未知。 */
+		const matchDeclared = (declared, hostVersion) => {
+			if (declared === null || hostVersion === null) return 'unknown'
+			const floor = declaredFloor(declared)
+			if (floor !== null) return compareDshVersions(hostVersion, floor) >= 0 ? 'match' : 'mismatch'
+			const versions = declared.split('||').map(value => exactDshVersion(value.trim()))
+			if (!versions.length || versions.some(value => value === null)) return 'unknown'
+			return versions.some(value => value.split('+')[0] === hostVersion.split('+')[0]) ? 'match' : 'mismatch'
+		}
+
 		/** 浏览器端再次做白名单投影，复制不包含原始状态、端点或异常文本。 */
 		function publicDiagnostics(value) {
 			const source = isRecord(value) ? value : {}
-			const version = value => typeof value === 'string' && value.length <= 100
-				&& /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(value) ? value : null
-			const pluginVersion = version(source.pluginVersion), dshVersion = version(source.dshVersion)
-			const versions = typeof source.declaredDsh === 'string' && source.declaredDsh.length <= 512 ? source.declaredDsh.split('||').map(value => version(value.trim())) : []
-			const declaredDsh = versions.length && versions.every(Boolean) ? versions.join(' || ') : null
-			const declarationMatch = dshVersion === null || declaredDsh === null ? 'unknown'
-				: versions.some(value => value.split('+')[0] === dshVersion.split('+')[0]) ? 'match' : 'mismatch'
+			const pluginVersion = exactDshVersion(source.pluginVersion), dshVersion = exactDshVersion(source.dshVersion)
+			const declared = typeof source.declaredDsh === 'string' && source.declaredDsh.length <= 512 ? source.declaredDsh : null
+			const floor = declared === null ? null : declaredFloor(declared)
+			const versions = declared === null || floor !== null ? [] : declared.split('||').map(item => exactDshVersion(item.trim()))
+			const declaredDsh = floor !== null ? `>=${floor}` : versions.length && versions.every(Boolean) ? versions.join(' || ') : null
+			const declarationMatch = matchDeclared(declaredDsh, dshVersion)
 			const report = { pluginVersion, dshVersion, declaredDsh, declarationMatch }
 			for (const field of ['enabled', 'autoAdvise', 'hasKey', 'requireConfirmation', 'redactSensitive', 'includeTranscript']) report[field] = typeof source[field] === 'boolean' ? source[field] : null
 			return report

@@ -158,8 +158,12 @@ only allowlisted facts, excluding keys, endpoints, user paths, question text, an
 
 ## Compatibility and limitations
 
-- `engines.dsh` declares **0.2.0-rc.2, 0.2.1-rc.2 and 0.2.1-rc.3**. Future runtimes are not
-  assumed compatible. Individual features depend on the host's public interaction APIs.
+- The only DSH version declaration is an open-ended floor: `"engines.dsh": ">=0.2.0-rc.2"`. There is
+  no upper bound and no `@deepseek-ai/dsh*` peer, so DSH never refuses the plugin after a runtime
+  update, and the market shows a definite **compatible** badge instead of **unknown/undeclared**
+  (an empty declaration is what produces *unknown*). Verified against **0.2.1-rc.3**; every newer
+  runtime stays inside the range. Add a ceiling only if a future runtime really breaks a public
+  interaction API. Individual features still depend on those host APIs.
 - The card follows the main session's pending interaction; only when that session has none does
   it fall back to another supported pending interaction. Historical or closed interactions are excluded.
 - Free-text-only questions are not supported. A mixed batch containing unsupported questions

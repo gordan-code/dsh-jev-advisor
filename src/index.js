@@ -88,17 +88,56 @@ const pluginManifest = JSON.parse(readFileSync(new URL('../package.json', import
 const exactVersion = value => typeof value === 'string' && value.length <= 100
   && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(value) ? value : null
 
-/** 本地诊断严格白名单；仅解释本包的精确版本声明，不保证实际功能兼容。 */
+/** 本包唯一公开的 DSH 声明形态：无上限下限 `>=X`，此后所有宿主版本都覆盖。 */
+const declaredFloor = value => {
+  if (typeof value !== 'string' || value.length > 100) return null
+  const match = /^>=\s*(\S+)$/.exec(value.trim())
+  return match === null ? null : exactVersion(match[1])
+}
+
+/** semver 优先级比较：先比主版本三元组，再比预发布标识（数字标识小于字母）。 */
+const compareVersions = (left, right) => {
+  const parse = value => {
+    const bare = value.split('+')[0]
+    const at = bare.indexOf('-')
+    return { nums: (at < 0 ? bare : bare.slice(0, at)).split('.').map(Number), pre: at < 0 ? [] : bare.slice(at + 1).split('.') }
+  }
+  const a = parse(left), b = parse(right)
+  for (let i = 0; i < 3; i += 1) if (a.nums[i] !== b.nums[i]) return a.nums[i] < b.nums[i] ? -1 : 1
+  if (a.pre.length === 0 || b.pre.length === 0) return a.pre.length === b.pre.length ? 0 : a.pre.length === 0 ? 1 : -1
+  for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i += 1) {
+    const x = a.pre[i], y = b.pre[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    if (x === y) continue
+    const numeric = /^\d+$/.test(x), other = /^\d+$/.test(y)
+    if (numeric && other) return Number(x) < Number(y) ? -1 : 1
+    if (numeric) return -1
+    if (other) return 1
+    return x < y ? -1 : 1
+  }
+  return 0
+}
+
+/** 声明判定：`>=X` 下限或 `||` 组合的精确版本，其余形态保持未知。 */
+const matchDeclaration = (declared, hostVersion) => {
+  if (declared === null || hostVersion === null) return 'unknown'
+  const floor = declaredFloor(declared)
+  if (floor !== null) return compareVersions(hostVersion, floor) >= 0 ? 'match' : 'mismatch'
+  const versions = declared.split('||').map(value => exactVersion(value.trim()))
+  if (!versions.length || versions.some(value => value === null)) return 'unknown'
+  return versions.some(value => value.split('+')[0] === hostVersion.split('+')[0]) ? 'match' : 'mismatch'
+}
+
+/** 本地诊断严格白名单；仅解释本包声明的两种形态，不保证实际功能兼容。 */
 export function diagnosticsOf(ctx, settings = {}) {
   let dshVersion = null
   try {
     const entries = ctx.get?.('pluginPackages')?.resolution?.entries
     if (Array.isArray(entries)) dshVersion = exactVersion(entries.find(entry => entry?.scope === 'installation' && entry.name === '@deepseek-ai/dsh-app-boot')?.version)
   } catch { /* 宿主未提供可信解析表时保持未知，不输出异常内容。 */ }
-  const declaredDsh = typeof pluginManifest.engines?.dsh === 'string' ? pluginManifest.engines.dsh : null
-  const versions = declaredDsh?.split('||').map(value => exactVersion(value.trim()))
-  const declarationMatch = dshVersion === null || !versions?.length || versions.some(value => value === null)
-    ? 'unknown' : versions.some(value => value.split('+')[0] === dshVersion.split('+')[0]) ? 'match' : 'mismatch'
+  const declaredDsh = typeof pluginManifest.engines?.dsh === 'string' ? pluginManifest.engines.dsh.trim() : null
+  const declarationMatch = matchDeclaration(declaredDsh, dshVersion)
   return {
     pluginVersion: exactVersion(pluginManifest.version), dshVersion, declaredDsh, declarationMatch,
     enabled: settings.enabled !== false, autoAdvise: settings.autoAdvise === true,

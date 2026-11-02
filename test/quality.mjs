@@ -15,14 +15,20 @@ test('浏览器质量任务固定 Playwright 支持的 Ubuntu 24.04，不跟随 
   assert.ok(quality.includes('      - run: npm run quality'))
 })
 
-test('0.2.0 仅声明已验证的 DSH 候选版本，并同步锁文件版本', async () => {
+test('0.2.1 声明无上限下限（宿主升级无需跟随发版），并同步锁文件版本', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const lock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'))
-  assert.equal(manifest.version, '0.2.0')
-  assert.equal(manifest.engines.dsh, '0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3')
+  assert.equal(manifest.version, '0.2.1')
+  // DSH 只有读到声明才显示「兼容」，所以保留一条 engines.dsh；但它必须是无上限下限，
+  // 否则宿主每升一个版本就会变回「不兼容」——正是 0.2.1-rc.4 之后踩到的坑。
+  assert.equal(manifest.engines.dsh, '>=0.2.0-rc.2')
+  assert.match(manifest.engines.dsh, /^>=\d+\.\d+\.\d+/)
+  assert.equal(/[<^~]|\s|\|\|/.test(manifest.engines.dsh.replace(/^>=/, '')), false, '声明不得包含上限、caret、tilde 或并列版本')
+  assert.equal(Object.hasOwn(manifest.dsh, 'engines'), false, '只有一处声明，避免两处口径分叉')
+  assert.equal(Object.keys(manifest.peerDependencies).some((name) => /^@deepseek-ai\/dsh(?:-|$)/.test(name)), false)
   assert.equal(lock.version, manifest.version)
   assert.equal(lock.packages[''].version, manifest.version)
-  assert.equal(lock.packages[''].engines.dsh, manifest.engines.dsh)
+  assert.deepEqual(lock.packages[''].engines, manifest.engines)
   assert.match(manifest.scripts.test, /test\/layout\.mjs/)
   assert.match(manifest.scripts.test, /test\/pending-state\.mjs/)
   assert.match(manifest.scripts.test, /test\/diagnostics\.mjs/)

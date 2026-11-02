@@ -131,7 +131,7 @@ test('real DSH Web host mounts Jev routes with isolated config and strict loopba
       assert.equal(getStatus.value.diagnostics.autoAdvise, false)
       if (process.env.DSH_TEST_VERSION === '0.2.1-rc.3') {
         assert.equal(getStatus.value.diagnostics.dshVersion, '0.2.1-rc.3', '诊断必须识别真实 rc.3 宿主解析表')
-        assert.equal(getStatus.value.diagnostics.declarationMatch, 'match')
+        assert.equal(getStatus.value.diagnostics.declarationMatch, 'match', '无上限下限 >=0.2.0-rc.2 覆盖 rc.3 及所有后续宿主')
       }
       assert.equal(mock.requests.length, 0, '本地状态与诊断不调用 Jev')
 
